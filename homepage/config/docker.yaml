@@ -1,0 +1,3 @@
+# Enables the docker integration (status dots) via the read-only socket mount.
+my-docker:
+  socket: /var/run/docker.sock

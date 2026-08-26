@@ -32,6 +32,11 @@ volumes:
   redis_data:
   prometheus_data:
   grafana_data:
+  portainer_data:
+  adguard_work:
+  adguard_conf:
+  ntfy_cache:
+  ntfy_data:
 
 services:
   # ==============================================================================
@@ -217,3 +222,111 @@ services:
       - /var/run:/var/run:ro
       - /sys:/sys:ro
       - /var/lib/docker:/var/lib/docker:ro
+
+  # ==============================================================================
+  # Optional services — enabled via Compose profiles.
+  # Set COMPOSE_PROFILES in .env (e.g. COMPOSE_PROFILES=portainer,homepage)
+  # or run: docker compose --profile portainer up -d
+  # ==============================================================================
+
+  portainer:
+    image: portainer/portainer-ce:lts
+    container_name: portainer
+    restart: unless-stopped
+    profiles:
+      - portainer
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - proxy
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - portainer_data:/data
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.portainer.rule: Host(`portainer.${DOMAIN}`)
+      traefik.http.routers.portainer.entrypoints: websecure
+      traefik.http.routers.portainer.middlewares: authelia@file
+      traefik.http.services.portainer.loadbalancer.server.port: "9000"
+
+  # AdGuard Home — DNS ports are published directly on the host; the web UI
+  # goes through Traefik. IMPORTANT: during the first-run wizard, set the
+  # admin web interface port to 3000 so the Traefik route below keeps working.
+  # If the host runs systemd-resolved, free port 53 first (see README).
+  adguard:
+    image: adguard/adguardhome:latest  # pin a specific version for production
+    container_name: adguard
+    restart: unless-stopped
+    profiles:
+      - adguard
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - proxy
+    ports:
+      - "53:53/tcp"
+      - "53:53/udp"
+    volumes:
+      - adguard_work:/opt/adguardhome/work
+      - adguard_conf:/opt/adguardhome/conf
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.adguard.rule: Host(`adguard.${DOMAIN}`)
+      traefik.http.routers.adguard.entrypoints: websecure
+      traefik.http.routers.adguard.middlewares: authelia@file
+      traefik.http.services.adguard.loadbalancer.server.port: "3000"
+
+  # Ntfy — deliberately NOT behind Authelia: mobile apps subscribe directly
+  # and can't follow the SSO redirect. Ntfy's own auth is set to deny-all;
+  # create users with: docker compose exec ntfy ntfy user add --role=admin <name>
+  ntfy:
+    image: binwiederhier/ntfy:v2.11.0  # check for newer releases
+    container_name: ntfy
+    restart: unless-stopped
+    profiles:
+      - ntfy
+    command: serve
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - proxy
+    environment:
+      - TZ=${TZ}
+      - NTFY_BASE_URL=https://ntfy.${DOMAIN}
+      - NTFY_BEHIND_PROXY=true
+      - NTFY_CACHE_FILE=/var/cache/ntfy/cache.db
+      - NTFY_AUTH_FILE=/var/lib/ntfy/auth.db
+      - NTFY_AUTH_DEFAULT_ACCESS=deny-all
+    volumes:
+      - ntfy_cache:/var/cache/ntfy
+      - ntfy_data:/var/lib/ntfy
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.ntfy.rule: Host(`ntfy.${DOMAIN}`)
+      traefik.http.routers.ntfy.entrypoints: websecure
+      traefik.http.services.ntfy.loadbalancer.server.port: "80"
+
+  homepage:
+    image: ghcr.io/gethomepage/homepage:latest  # pin a specific version for production
+    container_name: homepage
+    restart: unless-stopped
+    profiles:
+      - homepage
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - proxy
+    environment:
+      - TZ=${TZ}
+      - HOMEPAGE_ALLOWED_HOSTS=home.${DOMAIN}
+      - HOMEPAGE_VAR_DOMAIN=${DOMAIN}
+    volumes:
+      - ./homepage/config:/app/config
+      # Read-only socket for the docker status widget
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.homepage.rule: Host(`home.${DOMAIN}`)
+      traefik.http.routers.homepage.entrypoints: websecure
+      traefik.http.routers.homepage.middlewares: authelia@file
+      traefik.http.services.homepage.loadbalancer.server.port: "3000"

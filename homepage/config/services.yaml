@@ -1,0 +1,35 @@
+# {{HOMEPAGE_VAR_DOMAIN}} is injected from the DOMAIN env var (see docker-compose.yml)
+
+- Infrastructure:
+    - Traefik:
+        icon: traefik.svg
+        href: https://traefik.{{HOMEPAGE_VAR_DOMAIN}}
+        description: Reverse proxy & TLS
+    - Portainer:
+        icon: portainer.svg
+        href: https://portainer.{{HOMEPAGE_VAR_DOMAIN}}
+        description: Container management
+    - AdGuard Home:
+        icon: adguard-home.svg
+        href: https://adguard.{{HOMEPAGE_VAR_DOMAIN}}
+        description: DNS & ad blocking
+
+- Monitoring:
+    - Grafana:
+        icon: grafana.svg
+        href: https://grafana.{{HOMEPAGE_VAR_DOMAIN}}
+        description: Dashboards
+    - Prometheus:
+        icon: prometheus.svg
+        href: https://prometheus.{{HOMEPAGE_VAR_DOMAIN}}
+        description: Metrics
+
+- Auth & Notifications:
+    - Authelia:
+        icon: authelia.svg
+        href: https://auth.{{HOMEPAGE_VAR_DOMAIN}}
+        description: SSO portal
+    - Ntfy:
+        icon: ntfy.svg
+        href: https://ntfy.{{HOMEPAGE_VAR_DOMAIN}}
+        description: Push notifications

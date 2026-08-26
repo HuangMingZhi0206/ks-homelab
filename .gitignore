@@ -7,6 +7,8 @@ authelia/users_database.yml
 traefik/acme/
 authelia/db.sqlite3
 authelia/notification.txt
+backups/
+homepage/config/logs/
 
 # OS noise
 .DS_Store

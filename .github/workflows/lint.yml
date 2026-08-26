@@ -1,0 +1,34 @@
+name: Lint
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # .env, secrets/ and users_database.yml are gitignored, but
+      # `docker compose config` refuses to run without them — create stand-ins.
+      - name: Create CI stand-ins for gitignored files
+        run: |
+          cp .env.example .env
+          mkdir -p secrets traefik/acme
+          for s in authelia_jwt_secret authelia_session_secret authelia_storage_encryption_key grafana_admin_password; do
+            echo ci-placeholder > "secrets/$s"
+          done
+          cp authelia/users_database.yml.example authelia/users_database.yml
+
+      - name: Validate docker-compose (all profiles)
+        run: docker compose --profile "*" config -q
+
+      - name: yamllint
+        run: |
+          pip install --quiet yamllint
+          yamllint .
+
+      - name: shellcheck
+        run: shellcheck scripts/*.sh
