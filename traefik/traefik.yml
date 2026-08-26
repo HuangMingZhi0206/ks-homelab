@@ -1,0 +1,72 @@
+# Traefik v3 static configuration.
+# Changes here require a container restart. Runtime routing config lives in
+# ./dynamic (hot-reloaded) and in docker-compose.yml labels.
+
+global:
+  checkNewVersion: false
+  sendAnonymousUsage: false
+
+log:
+  level: INFO
+  format: json
+
+accessLog:
+  format: json
+  filters:
+    statusCodes:
+      - "400-599"
+
+api:
+  dashboard: true
+
+ping:
+  entryPoint: metrics
+
+entryPoints:
+  web:
+    address: ":80"
+    http:
+      redirections:
+        entryPoint:
+          to: websecure
+          scheme: https
+          permanent: true
+
+  websecure:
+    address: ":443"
+    http:
+      middlewares:
+        - security-headers@file
+      tls:
+        certResolver: letsencrypt
+
+  # Internal-only entrypoint: Prometheus scrapes /metrics here, healthcheck
+  # pings /ping here. Not published to the host.
+  metrics:
+    address: ":8082"
+
+metrics:
+  prometheus:
+    entryPoint: metrics
+    addRoutersLabels: true
+    addServicesLabels: true
+
+certificatesResolvers:
+  letsencrypt:
+    acme:
+      email: "changeme@example.com"  # overwritten by bootstrap.sh from ACME_EMAIL
+      storage: /acme/acme.json
+      # Uncomment while testing to avoid Let's Encrypt rate limits
+      # (certificates will be untrusted but issuance always succeeds):
+      # caServer: https://acme-staging-v02.api.letsencrypt.org/directory
+      httpChallenge:
+        entryPoint: web
+
+providers:
+  docker:
+    endpoint: "unix:///var/run/docker.sock"
+    exposedByDefault: false
+    network: proxy
+  file:
+    directory: /etc/traefik/dynamic
+    watch: true

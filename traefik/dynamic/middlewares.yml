@@ -1,0 +1,38 @@
+# Dynamic middleware definitions — hot-reloaded by Traefik.
+# Reference from container labels as <name>@file, e.g. authelia@file.
+
+http:
+  middlewares:
+    # Forward-auth to Authelia. Attach to any router that should require SSO.
+    authelia:
+      forwardAuth:
+        address: "http://authelia:9091/api/authz/forward-auth"
+        trustForwardHeader: true
+        authResponseHeaders:
+          - Remote-User
+          - Remote-Groups
+          - Remote-Email
+          - Remote-Name
+
+    # Applied globally on the websecure entrypoint (see traefik.yml).
+    security-headers:
+      headers:
+        browserXssFilter: true
+        contentTypeNosniff: true
+        frameDeny: true
+        referrerPolicy: strict-origin-when-cross-origin
+        stsSeconds: 31536000
+        stsIncludeSubdomains: true
+        stsPreload: true
+        customResponseHeaders:
+          Server: ""
+          X-Powered-By: ""
+
+    # Optional: attach to internet-facing routers to slow brute force.
+    rate-limit:
+      rateLimit:
+        average: 100
+        burst: 50
+
+    compress:
+      compress: {}
