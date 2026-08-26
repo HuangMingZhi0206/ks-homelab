@@ -1,0 +1,5 @@
+# Force LF everywhere — this repo deploys to Linux hosts.
+* text=auto eol=lf
+*.sh text eol=lf
+*.yml text eol=lf
+*.json text eol=lf
