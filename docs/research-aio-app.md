@@ -144,18 +144,65 @@ Semua sudah expose API dan tinggal dipakai:
 | **4. Aksi + otomasi** | Tombol aksi (start/stop VM, reboot router, toggle AdGuard) + audit log; rule engine sederhana; push via ntfy | AIO penuh |
 
 ### Open questions (perlu dijawab sebelum fase 3)
-1. Model router TP-Link yang dipakai persisnya apa? (menentukan Omada API vs lib unofficial vs "ganti router")
-2. Akses dari luar rumah: VPN (Tailscale) atau expose publik?
+1. ~~Model router TP-Link yang dipakai persisnya apa?~~ ✅ **Terjawab (2026-08-27): TL-MR100 — didukung `tplinkrouterc6u`, lihat §6.**
+2. Akses dari luar rumah: VPN (Tailscale) atau expose publik? → **Karena router-nya LTE (kemungkinan besar CGNAT), praktis wajib Tailscale/Cloudflare Tunnel — lihat §6.2.**
 3. Siapa pengguna app — sendiri, atau ada user lain (istri/keluarga) yang butuh UI super sederhana? (mempengaruhi seberapa penting fase 3)
 4. Kalau build: prioritas bahasa — Python (integrasi tercepat) vs Go/TS (runtime & DX)?
 
 ---
 
-## 6. Referensi
+## 6. Profil hardware aktual & implikasinya (update 2026-08-27)
+
+Perangkat yang benar-benar dipakai:
+
+| Perangkat | Spesifikasi | Peran yang disarankan |
+|---|---|---|
+| **TP-Link TL-MR100** | Router 4G LTE, WiFi N300 | Gateway internet (LTE) |
+| **D-Link DGS-1100-08V2** | Switch smart managed 8-port gigabit | Backbone LAN |
+| **Dell Vostro 5459** | Laptop i5 gen-6 (2C/4T), SSD 500GB | **Proxmox host** — lab VM/LXC |
+| **Raspberry Pi 5** | SSD NVMe 256GB | **Control plane always-on** — stack Docker repo ini |
+
+### 6.1 TL-MR100 — terverifikasi didukung ✅
+`tplinkrouterc6u` mendukung TL-MR100 lewat class **`TPLinkMRClient`** (seri MR/LTE). Artinya PoC fase 2 sudah jelas bentuknya: reboot router, toggle WiFi, daftar klien, status sinyal/data LTE — dan khusus seri MR ada **akses SMS** (kirim/baca SMS dari SIM), yang untuk operator Indonesia berguna buat cek/beli kuota langsung dari app. Catat versi hardware di label router (v1/v2/v3) dan pin versi firmware yang terbukti jalan.
+
+### 6.2 Konsekuensi terbesar: internet via LTE = kemungkinan besar CGNAT ⚠️
+Operator seluler (Telkomsel/XL/Indosat dkk.) umumnya menaruh pelanggan di belakang **Carrier-Grade NAT** — tidak ada IP publik. Dampaknya ke seluruh stack ini:
+
+- **Port 80/443 tidak bisa diakses dari internet** → port forwarding percuma.
+- **Let's Encrypt HTTP-01 challenge (konfigurasi Traefik saat ini) akan GAGAL** → harus ganti ke **DNS-01 challenge** (mis. domain di Cloudflare, `dnsChallenge` dengan API token). Bonus: bisa wildcard cert `*.domain`.
+- **Akses remote** → pakai **Tailscale** (install di Pi 5 + Vostro; gratis, tembus CGNAT) atau **Cloudflare Tunnel** kalau ada layanan yang memang mau dibuka publik.
+
+Cara memastikan: bandingkan IP WAN di halaman admin MR100 dengan hasil `curl ifconfig.me` — kalau beda, berarti CGNAT. *(TODO terpisah: sesuaikan `traefik/traefik.yml` ke dnsChallenge.)*
+
+### 6.3 DGS-1100-08V2 — monitoring via SNMP ✅
+Seri DGS-1100 punya dukungan **SNMP MIB** (aktifkan dulu di web UI switch). Tidak ada REST API — konfigurasi VLAN dsb. tetap manual via web UI — tapi untuk kebutuhan AIO (traffic per port, status link, error counter) cukup lewat **`snmp_exporter` → Prometheus → widget di dashboard**. Kontrol write via SNMP di kelas ini terbatas; anggap switch sebagai *monitor-only*.
+
+### 6.4 Pembagian peran dua mesin
+Prinsip: **control plane dipisah dari lab** supaya dashboard/DNS/VPN tetap hidup saat Proxmox dioprek.
+
+```
+Internet 4G (CGNAT?)
+      │
+  TL-MR100 ─── DGS-1100-08V2 ─┬─ Dell Vostro 5459 → Proxmox VE
+      (LTE)      (switch,     │    ├─ LXC/VM lab, Home Assistant OS (fase 1)
+                  SNMP)       │    └─ pve_exporter → discrape Prometheus di Pi
+                              └─ Raspberry Pi 5 (NVMe) → stack Docker repo ini
+                                   ├─ Traefik + Authelia + Grafana + Prometheus
+                                   ├─ AdGuard Home (DNS LAN) + Homepage + ntfy
+                                   └─ Tailscale (pintu akses remote)
+```
+
+- **Pi 5 = rumah stack repo ini.** Semua image di compose sudah multi-arch ARM64, jadi tinggal deploy. AdGuard di Pi jadi DNS untuk seluruh LAN (set DHCP di MR100 agar mengumumkan IP Pi sebagai DNS).
+- **Vostro = Proxmox.** Catatan laptop-as-server: i5-6200U cuma 2C/4T → utamakan **LXC** daripada VM penuh; set `HandleLidSwitch=ignore`, matikan suspend; baterai laptop = UPS gratisan (tapi cek kesehatan baterai tua — kembung = lepas saja); batasi charge threshold kalau BIOS mendukung.
+- Scrape tambahan untuk Prometheus (menyusul): `pve-exporter` (Proxmox), `snmp_exporter` (switch), exporter kecil custom berbasis `tplinkrouterc6u` (router — sekalian jadi PoC fase 2).
+
+## 7. Referensi
 
 - Proxmox VE API viewer: `https://pve.proxmox.com/pve-docs/api-viewer/`
 - Omada OpenAPI: menu *Settings → Platform Integration → Open API* di Omada Controller (v5.9+)
-- `tplinkrouterc6u`: `https://github.com/AlexandrErohin/TP-Link-Archer-C6U` (cek daftar model yang disupport)
+- `tplinkrouterc6u`: `https://github.com/AlexandrErohin/TP-Link-Archer-C6U` (daftar model — TL-MR100 didukung via `TPLinkMRClient`)
+- Spesifikasi TL-MR100: `https://service-provider.tp-link.com/lte-router/tl-mr100/`
+- DGS-1100-08V2 (seri dengan SNMP MIB): `https://www.dlink.com/us/en/products/dgs-1100-08v2-8-port-gigabit-smart-managed-switch`
 - `python-kasa`: `https://github.com/python-kasa/python-kasa`
 - Homepage widgets: `https://gethomepage.dev/widgets/`
 - Home Assistant integrations: `https://www.home-assistant.io/integrations/` (cari: proxmoxve, tplink_omada, tplink, adguard, ntfy)
