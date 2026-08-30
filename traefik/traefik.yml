@@ -37,8 +37,17 @@ entryPoints:
     http:
       middlewares:
         - security-headers@file
-      tls:
-        certResolver: letsencrypt
+      # LOCAL MODE (active): no certResolver, so Traefik serves its built-in
+      # self-signed certificate. Browsers warn on first visit — expected for a
+      # .lan domain that no public CA can validate. Everything else works.
+      #
+      # This stack sits behind double NAT (LTE router -> OPNsense), so the
+      # Let's Encrypt HTTP-01 challenge can never reach port 80 from the
+      # internet. Switching to a real domain means DNS-01, not HTTP-01 —
+      # see the commented resolver below, then set here:
+      #   tls:
+      #     certResolver: letsencrypt
+      tls: {}
 
   # Internal-only entrypoint: Prometheus scrapes /metrics here, healthcheck
   # pings /ping here. Not published to the host.
@@ -51,16 +60,24 @@ metrics:
     addRoutersLabels: true
     addServicesLabels: true
 
-certificatesResolvers:
-  letsencrypt:
-    acme:
-      email: "changeme@example.com"  # overwritten by bootstrap.sh from ACME_EMAIL
-      storage: /acme/acme.json
-      # Uncomment while testing to avoid Let's Encrypt rate limits
-      # (certificates will be untrusted but issuance always succeeds):
-      # caServer: https://acme-staging-v02.api.letsencrypt.org/directory
-      httpChallenge:
-        entryPoint: web
+# Disabled in local mode. To enable, uncomment this block AND set
+# `certResolver: letsencrypt` on the websecure entrypoint above.
+#
+# dnsChallenge (not httpChallenge) is required because the stack has no public
+# inbound reachability. Example for Cloudflare: put CF_DNS_API_TOKEN in .env and
+# pass it into the traefik service's environment in docker-compose.yml.
+#
+# certificatesResolvers:
+#   letsencrypt:
+#     acme:
+#       email: "changeme@example.com"  # overwritten by bootstrap.sh from ACME_EMAIL
+#       storage: /acme/acme.json
+#       # Uncomment while testing to avoid Let's Encrypt rate limits:
+#       # caServer: https://acme-staging-v02.api.letsencrypt.org/directory
+#       dnsChallenge:
+#         provider: cloudflare
+#         resolvers:
+#           - "1.1.1.1:53"
 
 providers:
   docker:

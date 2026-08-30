@@ -31,8 +31,8 @@ Production-ready Docker Compose homelab: **Traefik v3** (reverse proxy + automat
 ## Prerequisites
 
 - A **Linux host** with Docker Engine and Compose v2 (node-exporter/cAdvisor bind host paths like `/proc` and `/sys`)
-- A domain with DNS pointing at the host — either a wildcard `*.home.example.com` record or individual records for `auth`, `traefik`, `grafana`, `prometheus`
-- Ports **80** and **443** reachable from the internet (for Let's Encrypt HTTP-01 challenges)
+- A **domain name** for the services — it does **not** need to be publicly registered. The stack ships in *local TLS mode* (see below), so `home.lan` is fine.
+- DNS resolution for `*.<domain>` pointing at this host. On OPNsense: **Services → Unbound DNS → Overrides**.
 
 ## Quick start
 
@@ -49,6 +49,26 @@ The script is idempotent. It will:
 5. Validate, pull, and start the stack
 
 Then open `https://grafana.<your-domain>` — you'll be redirected to the Authelia portal, and after login land in Grafana.
+
+## TLS: local mode vs. real certificates
+
+`traefik/traefik.yml` ships in **local mode**: no ACME resolver, so Traefik serves
+its built-in self-signed certificate. Browsers warn on first visit — expected for
+a `.lan` domain no public CA can validate. Traffic is still encrypted and every
+other part of the stack behaves normally.
+
+This is deliberate. The stack sits behind double NAT (LTE router → OPNsense), so
+Let's Encrypt's **HTTP-01 challenge can never reach port 80** from the internet.
+
+To move to real certificates later you need a registered domain whose DNS is
+hosted by a supported provider, then switch to **DNS-01** — which needs no
+inbound connectivity at all:
+
+1. Uncomment the `certificatesResolvers` block at the bottom of `traefik/traefik.yml`
+2. Set `certResolver: letsencrypt` under the `websecure` entrypoint
+3. Put the provider API token in `.env` and pass it to the `traefik` service in `docker-compose.yml`
+
+Do **not** switch back to `httpChallenge` — it will fail behind CGNAT.
 
 ## Endpoints
 
