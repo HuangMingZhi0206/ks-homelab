@@ -21,6 +21,12 @@ info()  { printf '\033[1;34m[*]\033[0m %s\n' "$*"; }
 ok()    { printf '\033[1;32m[+]\033[0m %s\n' "$*"; }
 err()   { printf '\033[1;31m[!]\033[0m %s\n' "$*" >&2; }
 
+# Terminals that send CRLF — the Proxmox noVNC console among them — leave a
+# stray carriage return in every `read` result. That CR ends up inside the
+# generated YAML, and Authelia then refuses to start with "control characters
+# are not allowed". Strip CR/LF from anything captured from a prompt.
+clean() { printf '%s' "$1" | tr -d '\r\n'; }
+
 # ------------------------------------------------------------------ prerequisites
 command -v docker >/dev/null 2>&1 || { err "docker is not installed"; exit 1; }
 docker compose version >/dev/null 2>&1 || { err "docker compose v2 is required"; exit 1; }
@@ -33,7 +39,9 @@ if [[ ! -f .env ]]; then
   read -rp "Base domain (e.g. home.example.com): " DOMAIN
   read -rp "Let's Encrypt email: " ACME_EMAIL
   read -rp "Timezone [Etc/UTC]: " TZ_INPUT
-  TZ_INPUT="${TZ_INPUT:-Etc/UTC}"
+  DOMAIN="$(clean "$DOMAIN")"
+  ACME_EMAIL="$(clean "$ACME_EMAIL")"
+  TZ_INPUT="$(clean "${TZ_INPUT:-Etc/UTC}")"
 
   [[ -n "$DOMAIN" && -n "$ACME_EMAIL" ]] || { err "domain and email are required"; exit 1; }
 
@@ -58,18 +66,23 @@ fi
 # ------------------------------------------------------------------ secrets
 info "Generating secrets (skipping any that already exist)"
 mkdir -p secrets
+chmod 700 secrets
 gen_secret() {
-  local f="secrets/$1"
+  local f="secrets/$1" mode="${2:-600}"
   if [[ ! -s "$f" ]]; then
     openssl rand -hex 32 > "$f"
-    chmod 600 "$f"
     ok "generated $f"
   fi
+  chmod "$mode" "$f"
 }
 gen_secret authelia_jwt_secret
 gen_secret authelia_session_secret
 gen_secret authelia_storage_encryption_key
-gen_secret grafana_admin_password
+# Grafana's entrypoint reads this as uid 472, not root. Compose outside Swarm
+# silently ignores the secret's uid/gid/mode fields, so the source file itself
+# must be readable by that user or Grafana dies with "Permission denied".
+# secrets/ is mode 700, so this is not exposed to other users on the host.
+gen_secret grafana_admin_password 644
 
 # ------------------------------------------------------------------ traefik ACME storage
 mkdir -p traefik/acme
@@ -83,19 +96,21 @@ ok "traefik/acme/acme.json ready (mode 600)"
 if [[ ! -f authelia/users_database.yml ]]; then
   info "Creating Authelia admin user"
   read -rp "Admin username [admin]: " ADMIN_USER
-  ADMIN_USER="${ADMIN_USER:-admin}"
+  ADMIN_USER="$(clean "${ADMIN_USER:-admin}")"
   read -rp "Admin email [admin@${DOMAIN}]: " ADMIN_EMAIL
-  ADMIN_EMAIL="${ADMIN_EMAIL:-admin@${DOMAIN}}"
+  ADMIN_EMAIL="$(clean "${ADMIN_EMAIL:-admin@${DOMAIN}}")"
 
   while true; do
     read -rsp "Admin password: " ADMIN_PASS; echo
     read -rsp "Confirm password: " ADMIN_PASS2; echo
+    ADMIN_PASS="$(clean "$ADMIN_PASS")"
+    ADMIN_PASS2="$(clean "$ADMIN_PASS2")"
     [[ "$ADMIN_PASS" == "$ADMIN_PASS2" && -n "$ADMIN_PASS" ]] && break
     err "passwords empty or do not match, try again"
   done
 
   info "Hashing password (argon2id)"
-  HASH="$(docker run --rm "$AUTHELIA_IMAGE" authelia crypto hash generate argon2 --password "$ADMIN_PASS" | awk '/Digest:/ {print $2}')"
+  HASH="$(clean "$(docker run --rm "$AUTHELIA_IMAGE" authelia crypto hash generate argon2 --password "$ADMIN_PASS" | awk '/Digest:/ {print $2}')")"
   [[ -n "$HASH" ]] || { err "failed to generate password hash"; exit 1; }
 
   cat > authelia/users_database.yml <<EOF
