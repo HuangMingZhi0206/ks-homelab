@@ -43,7 +43,7 @@ services:
   # Traefik — reverse proxy, TLS termination, Let's Encrypt
   # ==============================================================================
   traefik:
-    image: traefik:v3.5
+    image: traefik:v3.6.25
     container_name: traefik
     restart: unless-stopped
     security_opt:
