@@ -155,3 +155,14 @@ docker compose down                      # stop (volumes/data preserved)
 - **Let's Encrypt rate limits:** while testing, uncomment the staging `caServer` line in [traefik/traefik.yml](traefik/traefik.yml) — 5 failed issuances per hour on production will lock you out for a while.
 - `secrets/`, `.env`, `users_database.yml`, and `traefik/acme/` are gitignored. Everything else is safe to commit.
 - Prometheus, node-exporter, cAdvisor, and Redis are on internal-only networks — nothing is reachable except through Traefik on 80/443.
+
+## Kiosk display
+
+Set `KIOSK_IP` in `.env` to one host in CIDR form and that machine reaches
+Grafana without ever seeing a login prompt — useful for a wall display. Two
+pieces make it work: an Authelia `bypass` rule scoped to that single address,
+and Grafana's anonymous `Viewer` role. Everyone else still goes through SSO,
+and editing anything still requires a real Grafana login.
+
+Point the browser at a dashboard URL ending in `&kiosk` to drop Grafana's
+chrome. Unset `KIOSK_IP` and nothing is bypassed.

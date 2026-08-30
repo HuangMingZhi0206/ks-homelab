@@ -100,6 +100,9 @@ services:
       - TZ=${TZ}
       - DOMAIN=${DOMAIN}
       # Enables {{ env "DOMAIN" }} templating inside configuration.yml
+      # Host allowed to reach Grafana without authenticating (the kiosk display).
+      # Defaults to loopback, i.e. nothing, when KIOSK_IP is unset.
+      - KIOSK_IP=${KIOSK_IP:-127.0.0.1/32}
       - X_AUTHELIA_CONFIG_FILTERS=template
       - AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET_FILE=/run/secrets/authelia_jwt_secret
       - AUTHELIA_SESSION_SECRET_FILE=/run/secrets/authelia_session_secret
@@ -179,6 +182,12 @@ services:
       - GF_USERS_ALLOW_SIGN_UP=false
       - GF_ANALYTICS_REPORTING_ENABLED=false
       - GF_ANALYTICS_CHECK_FOR_UPDATES=false
+      # Read-only access without a Grafana login, for the wall-display kiosk.
+      # Only reachable by hosts Authelia bypasses (see KIOSK_IP); everyone else
+      # still hits the SSO portal first, and editing still requires logging in.
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_NAME=Main Org.
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
     volumes:
       - grafana_data:/var/lib/grafana
       - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro

@@ -32,6 +32,14 @@ access_control:
     # The auth portal itself must be reachable without auth.
     - domain: 'auth.{{ env "DOMAIN" }}'
       policy: 'bypass'
+    # The wall-display kiosk: one host, Grafana only, read-only. Grafana's
+    # anonymous Viewer role does the actual limiting — this rule only spares
+    # that one machine the login prompt so the screen never goes stale.
+    # KIOSK_IP defaults to 127.0.0.1/32, which matches nothing in practice.
+    - domain: 'grafana.{{ env "DOMAIN" }}'
+      networks:
+        - '{{ env "KIOSK_IP" }}'
+      policy: 'bypass'
     # Everything else on the domain requires login.
     # Change to 'two_factor' once you have enrolled a TOTP device.
     - domain: '*.{{ env "DOMAIN" }}'
