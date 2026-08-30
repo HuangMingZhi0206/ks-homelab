@@ -5,6 +5,7 @@ authelia/users_database.yml
 
 # Runtime state
 traefik/acme/
+traefik/certs/
 authelia/db.sqlite3
 authelia/notification.txt
 backups/

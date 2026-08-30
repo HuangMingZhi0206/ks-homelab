@@ -63,6 +63,26 @@ if grep -q 'changeme@example.com' traefik/traefik.yml; then
   ok "ACME email set in traefik/traefik.yml"
 fi
 
+# ------------------------------------------------------------------ local TLS cert
+# Local mode has no ACME resolver, and traefik/dynamic/tls.yml sets
+# sniStrict — which rejects any SNI matching no configured certificate. Give
+# Traefik a self-signed wildcard so every *.${DOMAIN} host resolves to a
+# certificate with the right name. Import traefik/certs/local.crt into the
+# browser's trust store to drop the warning entirely.
+DOMAIN="${DOMAIN:-$(grep -E '^DOMAIN=' .env | cut -d= -f2-)}"
+mkdir -p traefik/certs
+if [[ ! -s traefik/certs/local.crt ]]; then
+  info "Generating self-signed wildcard certificate for *.${DOMAIN}"
+  openssl req -x509 -nodes -newkey rsa:2048 -days 3650 \
+    -keyout traefik/certs/local.key -out traefik/certs/local.crt \
+    -subj "/CN=*.${DOMAIN}" \
+    -addext "subjectAltName=DNS:*.${DOMAIN},DNS:${DOMAIN}" 2>/dev/null \
+    || { err "openssl failed to generate the local certificate"; exit 1; }
+  ok "traefik/certs/local.crt generated for *.${DOMAIN} (valid 10 years)"
+fi
+chmod 644 traefik/certs/local.crt
+chmod 600 traefik/certs/local.key
+
 # ------------------------------------------------------------------ secrets
 info "Generating secrets (skipping any that already exist)"
 mkdir -p secrets

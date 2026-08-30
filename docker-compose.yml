@@ -61,6 +61,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
       - ./traefik/dynamic:/etc/traefik/dynamic:ro
+      - ./traefik/certs:/etc/traefik/certs:ro
       - ./traefik/acme:/acme
     healthcheck:
       test: ["CMD", "traefik", "healthcheck", "--ping"]

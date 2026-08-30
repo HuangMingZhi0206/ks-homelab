@@ -70,6 +70,15 @@ inbound connectivity at all:
 
 Do **not** switch back to `httpChallenge` — it will fail behind CGNAT.
 
+`bootstrap.sh` generates `traefik/certs/local.crt` — a self-signed wildcard for
+`*.<domain>`, valid 10 years. It is required, not cosmetic: `dynamic/tls.yml`
+sets `sniStrict`, which rejects any SNI matching no configured certificate, so
+without it every request fails with a TLS `unrecognized_name` alert.
+
+To drop the browser warning, import that `.crt` into your OS or browser trust
+store — the certificate carries the correct `*.<domain>` SAN, so once trusted
+the padlock goes green.
+
 ## Endpoints
 
 | Service | URL | Protected by Authelia |
