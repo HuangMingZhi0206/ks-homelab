@@ -34,7 +34,7 @@ Line by line:
 | Piece | Why |
 |---|---|
 | `networks: [proxy]` | Traefik's docker provider is pinned to the `proxy` network. A container not on it is unreachable. |
-| `traefik.enable` | `exposedByDefault: false` in [traefik.yml](../traefik/traefik.yml) means services opt in explicitly. |
+| `traefik.enable` | `exposedByDefault: false` in [traefik.yml.tmpl](../traefik/traefik.yml.tmpl) means services opt in explicitly. |
 | `routers.<name>.rule` | The hostname. `${DOMAIN}` comes from `.env`. Router names must be unique. |
 | `entrypoints: websecure` | Port 443. TLS + Let's Encrypt are inherited from the entrypoint defaults; port 80 already redirects. |
 | `middlewares: authelia@file` | Forward-auth SSO. **Drop this line** for public services or apps with API clients that can't follow browser redirects (see Ntfy). |

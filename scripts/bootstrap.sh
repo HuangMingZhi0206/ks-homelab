@@ -57,11 +57,13 @@ fi
 # shellcheck disable=SC1091
 source .env
 
-# Traefik's static config cannot read env vars — patch the ACME email in place.
-if grep -q 'changeme@example.com' traefik/traefik.yml; then
-  sed -i.bak "s|changeme@example.com|${ACME_EMAIL}|" traefik/traefik.yml && rm -f traefik/traefik.yml.bak
-  ok "ACME email set in traefik/traefik.yml"
-fi
+# Traefik's static config cannot read env vars, so render it from a template.
+# Regenerated every run: the only per-install value is the ACME email, which
+# comes from .env. traefik.yml is gitignored — generating a *tracked* file is
+# what made `git pull` refuse to update this repo in the first place.
+[[ -f traefik/traefik.yml.tmpl ]] || { err "traefik/traefik.yml.tmpl is missing"; exit 1; }
+sed "s|__ACME_EMAIL__|${ACME_EMAIL}|" traefik/traefik.yml.tmpl > traefik/traefik.yml
+ok "traefik/traefik.yml rendered from template"
 
 # ------------------------------------------------------------------ fallback TLS cert
 # Real certificates come from Let's Encrypt, but issuance is asynchronous and

@@ -1,4 +1,10 @@
-# Traefik v3 static configuration.
+# Template for Traefik v3 static configuration.
+#
+# bootstrap.sh renders this into traefik/traefik.yml on every run, substituting
+# __ACME_EMAIL__ from .env. Edit THIS file, never the generated one — and note
+# that traefik.yml is gitignored precisely so that generating it can never make
+# `git pull` refuse to update a tracked file.
+#
 # Changes here require a container restart. Runtime routing config lives in
 # ./dynamic (hot-reloaded) and in docker-compose.yml labels.
 
@@ -61,7 +67,7 @@ metrics:
 certificatesResolvers:
   letsencrypt:
     acme:
-      email: "changeme@example.com"  # overwritten by bootstrap.sh from ACME_EMAIL
+      email: "__ACME_EMAIL__"  # substituted by bootstrap.sh from ACME_EMAIL
       storage: /acme/acme.json
       # Uncomment while testing to avoid Let's Encrypt rate limits
       # (certificates will be untrusted but issuance always succeeds):

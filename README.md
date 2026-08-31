@@ -7,7 +7,7 @@ Production-ready Docker Compose homelab: **Traefik v3** (reverse proxy + automat
 ├── docker-compose.yml            # All services, networks, volumes, secrets
 ├── .env.example                  # Copy to .env (bootstrap does this)
 ├── traefik/
-│   ├── traefik.yml               # Static config: entrypoints, ACME, providers
+│   ├── traefik.yml.tmpl          # Static config template; bootstrap renders traefik.yml
 │   └── dynamic/                  # Hot-reloaded: middlewares, TLS options
 ├── authelia/
 │   ├── configuration.yml         # Authelia config (templated with $DOMAIN)
@@ -53,7 +53,7 @@ Then open `https://grafana.<your-domain>` — you'll be redirected to the Authel
 ## TLS
 
 Certificates come from Let's Encrypt using the **DNS-01** challenge, configured
-for Cloudflare in `traefik/traefik.yml`. Set `CF_DNS_API_TOKEN` in `.env` to a
+for Cloudflare in `traefik/traefik.yml.tmpl`. Set `CF_DNS_API_TOKEN` in `.env` to a
 token scoped to *Zone → DNS → Edit* on that one zone.
 
 DNS-01 rather than HTTP-01 is deliberate, not a preference: this stack runs
@@ -71,6 +71,12 @@ service hostnames in local DNS — on OPNsense, **Services → Unbound DNS →
 Overrides** — so the internal addressing is never published. Public name,
 private address.
 
+Traefik's static config is generated: edit **`traefik/traefik.yml.tmpl`**, and
+`bootstrap.sh` renders `traefik/traefik.yml` from it on every run, substituting
+`__ACME_EMAIL__`. The rendered file is gitignored on purpose — an earlier
+version patched the tracked `traefik.yml` in place, which left the working tree
+dirty and made `git pull` silently refuse to update anything.
+
 `bootstrap.sh` also generates `traefik/certs/local.crt`, a self-signed wildcard
 for `*.<domain>`. It is the fallback, not the main event: issuance is
 asynchronous and can fail, and `dynamic/tls.yml` sets `sniStrict`, which rejects
@@ -78,7 +84,7 @@ any SNI matching no configured certificate. Without the fallback, a failed or
 pending ACME order means `ERR_SSL_UNRECOGNIZED_NAME_ALERT` rather than a
 warning. It is regenerated automatically when `DOMAIN` changes.
 
-While testing, uncomment `caServer` in `traefik.yml` to use Let's Encrypt
+While testing, uncomment `caServer` in `traefik.yml.tmpl` to use Let's Encrypt
 staging — issuance always succeeds there, so you can confirm the token and DNS
 plumbing without burning the production rate limit.
 
@@ -155,7 +161,7 @@ docker compose down                      # stop (volumes/data preserved)
 
 ## Notes
 
-- **Let's Encrypt rate limits:** while testing, uncomment the staging `caServer` line in [traefik/traefik.yml](traefik/traefik.yml) — 5 failed issuances per hour on production will lock you out for a while.
+- **Let's Encrypt rate limits:** while testing, uncomment the staging `caServer` line in [traefik/traefik.yml.tmpl](traefik/traefik.yml.tmpl) — 5 failed issuances per hour on production will lock you out for a while.
 - `secrets/`, `.env`, `users_database.yml`, and `traefik/acme/` are gitignored. Everything else is safe to commit.
 - Prometheus, node-exporter, cAdvisor, and Redis are on internal-only networks — nothing is reachable except through Traefik on 80/443.
 

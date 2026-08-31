@@ -14,3 +14,4 @@ homepage/config/logs/
 # OS noise
 .DS_Store
 Thumbs.db
+traefik/traefik.yml

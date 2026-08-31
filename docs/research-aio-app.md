@@ -172,7 +172,7 @@ Operator seluler (Telkomsel/XL/Indosat dkk.) umumnya menaruh pelanggan di belaka
 - **Let's Encrypt HTTP-01 challenge (konfigurasi Traefik saat ini) akan GAGAL** → harus ganti ke **DNS-01 challenge** (mis. domain di Cloudflare, `dnsChallenge` dengan API token). Bonus: bisa wildcard cert `*.domain`.
 - **Akses remote** → pakai **Tailscale** (install di Pi 5 + Vostro; gratis, tembus CGNAT) atau **Cloudflare Tunnel** kalau ada layanan yang memang mau dibuka publik.
 
-Cara memastikan: bandingkan IP WAN di halaman admin MR100 dengan hasil `curl ifconfig.me` — kalau beda, berarti CGNAT. *(TODO terpisah: sesuaikan `traefik/traefik.yml` ke dnsChallenge.)*
+Cara memastikan: bandingkan IP WAN di halaman admin MR100 dengan hasil `curl ifconfig.me` — kalau beda, berarti CGNAT. *(Selesai 2026-08-31: `traefik/traefik.yml.tmpl` sudah memakai dnsChallenge Cloudflare.)*
 
 ### 6.3 DGS-1100-08V2 — monitoring via SNMP ✅
 Seri DGS-1100 punya dukungan **SNMP MIB** (aktifkan dulu di web UI switch). Tidak ada REST API — konfigurasi VLAN dsb. tetap manual via web UI — tapi untuk kebutuhan AIO (traffic per port, status link, error counter) cukup lewat **`snmp_exporter` → Prometheus → widget di dashboard**. Kontrol write via SNMP di kelas ini terbatas; anggap switch sebagai *monitor-only*.
