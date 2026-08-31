@@ -77,12 +77,19 @@ Traefik's static config is generated: edit **`traefik/traefik.yml.tmpl`**, and
 version patched the tracked `traefik.yml` in place, which left the working tree
 dirty and made `git pull` silently refuse to update anything.
 
-`bootstrap.sh` also generates `traefik/certs/local.crt`, a self-signed wildcard
-for `*.<domain>`. It is the fallback, not the main event: issuance is
-asynchronous and can fail, and `dynamic/tls.yml` sets `sniStrict`, which rejects
-any SNI matching no configured certificate. Without the fallback, a failed or
-pending ACME order means `ERR_SSL_UNRECOGNIZED_NAME_ALERT` rather than a
-warning. It is regenerated automatically when `DOMAIN` changes.
+Every router must carry `traefik.http.routers.<name>.tls.certresolver`. The
+`certResolver` on the entrypoint is only a *default for routers that are already
+TLS-enabled*, and a router with no `tls` label is not one — so it silently never
+gets a certificate.
+
+`dynamic/tls.yml` deliberately configures no certificates of its own. Traefik
+treats anything in the certificate store as coverage for the domains it matches,
+so a self-signed wildcard for `*.<domain>` makes ACME log *"No ACME certificate
+generation required for domains"* and serve that certificate indefinitely.
+Everything keeps working, with a browser warning and no error anywhere to
+explain it. `sniStrict` stays `false` for the same reason: it ignores Traefik's
+built-in default certificate, so with ACME as the only source it would reject
+every request until the first certificate is issued.
 
 While testing, uncomment `caServer` in `traefik.yml.tmpl` to use Let's Encrypt
 staging — issuance always succeeds there, so you can confirm the token and DNS

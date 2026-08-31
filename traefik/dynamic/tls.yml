@@ -1,27 +1,23 @@
 # TLS hardening — modern-ish defaults, TLS 1.2 minimum.
+#
+# Deliberately no `certificates` and no `stores.default.defaultCertificate`.
+# Traefik counts any certificate in the store as coverage for a domain, so a
+# self-signed wildcard for *.${DOMAIN} makes ACME conclude there is nothing to
+# issue — it logs "No ACME certificate generation required for domains" and
+# quietly serves the self-signed one forever. That is a silent failure: every
+# service works, just with a browser warning and no error anywhere to explain
+# it. Leave certificate provisioning entirely to the ACME resolver.
+#
+# Traefik still has a built-in default certificate for unmatched SNI, which
+# covers the minute or two before the first certificate is issued.
 tls:
-  stores:
-    default:
-      # Served only when no other certificate matches the requested SNI: while
-      # Let's Encrypt is still issuing, and if issuance ever fails.
-      #
-      # It must NOT also appear under `tls.certificates`. Traefik skips ACME for
-      # any domain it already holds a matching certificate for, and this
-      # wildcard matches every service hostname — listing it there silently
-      # prevented a single certificate from ever being requested.
-      defaultCertificate:
-        certFile: /etc/traefik/certs/local.crt
-        keyFile: /etc/traefik/certs/local.key
-
   options:
     default:
       minVersion: VersionTLS12
-      # sniStrict rejects any SNI matching no *configured* certificate — it does
-      # not fall back to defaultCertificate. With ACME as the only source of
-      # matching certificates, turning it on would make every request fail
-      # outright during issuance, or permanently if issuance broke. Off, the
-      # fallback covers those gaps and the failure mode is a browser warning
-      # instead of a dead site.
+      # Must stay false. sniStrict rejects any SNI matching no *configured*
+      # certificate and ignores the built-in default, so with ACME as the only
+      # source of certificates it would reject every request until issuance
+      # completes — and permanently if issuance ever broke.
       sniStrict: false
       cipherSuites:
         - TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256
