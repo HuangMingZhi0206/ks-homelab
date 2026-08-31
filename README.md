@@ -182,3 +182,7 @@ and editing anything still requires a real Grafana login.
 
 Point the browser at a dashboard URL ending in `&kiosk` to drop Grafana's
 chrome. Unset `KIOSK_IP` and nothing is bypassed.
+
+Host-level setup for the display itself — X, Chromium, the systemd unit, and the
+`getty@tty1` conflict that makes it fail silently — is in
+[docs/kiosk-display.md](docs/kiosk-display.md).
