@@ -77,6 +77,7 @@ services:
       # Dashboard at https://traefik.${DOMAIN}, protected by Authelia
       traefik.http.routers.traefik.rule: Host(`traefik.${DOMAIN}`)
       traefik.http.routers.traefik.entrypoints: websecure
+      traefik.http.routers.traefik.tls.certresolver: letsencrypt
       traefik.http.routers.traefik.service: api@internal
       traefik.http.routers.traefik.middlewares: authelia@file
 
@@ -119,6 +120,7 @@ services:
       traefik.enable: "true"
       traefik.http.routers.authelia.rule: Host(`auth.${DOMAIN}`)
       traefik.http.routers.authelia.entrypoints: websecure
+      traefik.http.routers.authelia.tls.certresolver: letsencrypt
       traefik.http.services.authelia.loadbalancer.server.port: "9091"
 
   redis:
@@ -162,6 +164,7 @@ services:
       traefik.enable: "true"
       traefik.http.routers.prometheus.rule: Host(`prometheus.${DOMAIN}`)
       traefik.http.routers.prometheus.entrypoints: websecure
+      traefik.http.routers.prometheus.tls.certresolver: letsencrypt
       traefik.http.routers.prometheus.middlewares: authelia@file
       traefik.http.services.prometheus.loadbalancer.server.port: "9090"
 
@@ -200,6 +203,7 @@ services:
       traefik.enable: "true"
       traefik.http.routers.grafana.rule: Host(`grafana.${DOMAIN}`)
       traefik.http.routers.grafana.entrypoints: websecure
+      traefik.http.routers.grafana.tls.certresolver: letsencrypt
       traefik.http.routers.grafana.middlewares: authelia@file
       traefik.http.services.grafana.loadbalancer.server.port: "3000"
 
@@ -260,6 +264,7 @@ services:
       traefik.enable: "true"
       traefik.http.routers.portainer.rule: Host(`portainer.${DOMAIN}`)
       traefik.http.routers.portainer.entrypoints: websecure
+      traefik.http.routers.portainer.tls.certresolver: letsencrypt
       traefik.http.routers.portainer.middlewares: authelia@file
       traefik.http.services.portainer.loadbalancer.server.port: "9000"
 
@@ -287,6 +292,7 @@ services:
       traefik.enable: "true"
       traefik.http.routers.adguard.rule: Host(`adguard.${DOMAIN}`)
       traefik.http.routers.adguard.entrypoints: websecure
+      traefik.http.routers.adguard.tls.certresolver: letsencrypt
       traefik.http.routers.adguard.middlewares: authelia@file
       traefik.http.services.adguard.loadbalancer.server.port: "3000"
 
@@ -318,6 +324,7 @@ services:
       traefik.enable: "true"
       traefik.http.routers.ntfy.rule: Host(`ntfy.${DOMAIN}`)
       traefik.http.routers.ntfy.entrypoints: websecure
+      traefik.http.routers.ntfy.tls.certresolver: letsencrypt
       traefik.http.services.ntfy.loadbalancer.server.port: "80"
 
   homepage:
@@ -342,5 +349,6 @@ services:
       traefik.enable: "true"
       traefik.http.routers.homepage.rule: Host(`home.${DOMAIN}`)
       traefik.http.routers.homepage.entrypoints: websecure
+      traefik.http.routers.homepage.tls.certresolver: letsencrypt
       traefik.http.routers.homepage.middlewares: authelia@file
       traefik.http.services.homepage.loadbalancer.server.port: "3000"

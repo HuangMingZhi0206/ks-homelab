@@ -51,6 +51,7 @@ ${PROFILE_BLOCK:+$PROFILE_BLOCK
       traefik.enable: "true"
       traefik.http.routers.${NAME}.rule: Host(\`${SUBDOMAIN}.\${DOMAIN}\`)
       traefik.http.routers.${NAME}.entrypoints: websecure
+      traefik.http.routers.${NAME}.tls.certresolver: letsencrypt
 ${MIDDLEWARE_LINE:+$MIDDLEWARE_LINE
 }      traefik.http.services.${NAME}.loadbalancer.server.port: "${PORT}"
 EOF

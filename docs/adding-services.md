@@ -25,6 +25,7 @@ It asks for a name, image, subdomain, port, whether to protect it with SSO, and 
       traefik.enable: "true"           # required: exposedByDefault is false
       traefik.http.routers.myapp.rule: Host(`myapp.${DOMAIN}`)
       traefik.http.routers.myapp.entrypoints: websecure
+      traefik.http.routers.myapp.tls.certresolver: letsencrypt
       traefik.http.routers.myapp.middlewares: authelia@file
       traefik.http.services.myapp.loadbalancer.server.port: "8080"
 ```
@@ -36,7 +37,8 @@ Line by line:
 | `networks: [proxy]` | Traefik's docker provider is pinned to the `proxy` network. A container not on it is unreachable. |
 | `traefik.enable` | `exposedByDefault: false` in [traefik.yml.tmpl](../traefik/traefik.yml.tmpl) means services opt in explicitly. |
 | `routers.<name>.rule` | The hostname. `${DOMAIN}` comes from `.env`. Router names must be unique. |
-| `entrypoints: websecure` | Port 443. TLS + Let's Encrypt are inherited from the entrypoint defaults; port 80 already redirects. |
+| `entrypoints: websecure` | Port 443. Port 80 already redirects here. |
+| `tls.certresolver` | **Required.** The entrypoint `certResolver` is only a default for routers that are already TLS-enabled, so a router without this label never gets a Let's Encrypt certificate — it silently falls back to the self-signed default with no error anywhere. |
 | `middlewares: authelia@file` | Forward-auth SSO. **Drop this line** for public services or apps with API clients that can't follow browser redirects (see Ntfy). |
 | `loadbalancer.server.port` | The port the app listens on *inside* the container. Needed whenever the image exposes more than one port (safe to always set). |
 
