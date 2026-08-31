@@ -1,20 +1,14 @@
 # TLS hardening — modern-ish defaults, TLS 1.2 minimum.
 tls:
-  # In local mode there is no ACME resolver issuing per-host certificates, so
-  # the only certificate Traefik has is the self-signed wildcard that
-  # bootstrap.sh generates for the configured domain. It is registered both as
-  # a matchable certificate and as the default, because `sniStrict` below
-  # rejects any SNI that matches no configured certificate — without this,
-  # every request fails with a TLS `unrecognized_name` alert.
-  #
-  # Switching to real certificates (DNS-01, see traefik.yml) makes this block
-  # redundant but harmless: ACME certificates take precedence when they match.
-  certificates:
-    - certFile: /etc/traefik/certs/local.crt
-      keyFile: /etc/traefik/certs/local.key
-
   stores:
     default:
+      # Served only when no other certificate matches the requested SNI: while
+      # Let's Encrypt is still issuing, and if issuance ever fails.
+      #
+      # It must NOT also appear under `tls.certificates`. Traefik skips ACME for
+      # any domain it already holds a matching certificate for, and this
+      # wildcard matches every service hostname — listing it there silently
+      # prevented a single certificate from ever being requested.
       defaultCertificate:
         certFile: /etc/traefik/certs/local.crt
         keyFile: /etc/traefik/certs/local.key
@@ -22,7 +16,13 @@ tls:
   options:
     default:
       minVersion: VersionTLS12
-      sniStrict: true
+      # sniStrict rejects any SNI matching no *configured* certificate — it does
+      # not fall back to defaultCertificate. With ACME as the only source of
+      # matching certificates, turning it on would make every request fail
+      # outright during issuance, or permanently if issuance broke. Off, the
+      # fallback covers those gaps and the failure mode is a browser warning
+      # instead of a dead site.
+      sniStrict: false
       cipherSuites:
         - TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256
         - TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
