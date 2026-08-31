@@ -57,6 +57,10 @@ services:
     environment:
       - TZ=${TZ}
       - TRAEFIK_LOG_LEVEL=${TRAEFIK_LOG_LEVEL:-INFO}
+      # Cloudflare API token for the DNS-01 challenge. Scope it to Zone -> DNS
+      # -> Edit on this zone only; a Global API Key would let Traefik touch
+      # every domain in the account.
+      - CF_DNS_API_TOKEN=${CF_DNS_API_TOKEN:-}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro

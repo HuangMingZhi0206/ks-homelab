@@ -31,7 +31,7 @@ Production-ready Docker Compose homelab: **Traefik v3** (reverse proxy + automat
 ## Prerequisites
 
 - A **Linux host** with Docker Engine and Compose v2 (node-exporter/cAdvisor bind host paths like `/proc` and `/sys`)
-- A **domain name** for the services — it does **not** need to be publicly registered. The stack ships in *local TLS mode* (see below), so `home.lan` is fine.
+- A **domain** whose DNS is hosted by Cloudflare, plus an API token scoped to that zone (see TLS below). No public A records or open ports are required.
 - DNS resolution for `*.<domain>` pointing at this host. On OPNsense: **Services → Unbound DNS → Overrides**.
 
 ## Quick start
@@ -50,34 +50,37 @@ The script is idempotent. It will:
 
 Then open `https://grafana.<your-domain>` — you'll be redirected to the Authelia portal, and after login land in Grafana.
 
-## TLS: local mode vs. real certificates
+## TLS
 
-`traefik/traefik.yml` ships in **local mode**: no ACME resolver, so Traefik serves
-its built-in self-signed certificate. Browsers warn on first visit — expected for
-a `.lan` domain no public CA can validate. Traffic is still encrypted and every
-other part of the stack behaves normally.
+Certificates come from Let's Encrypt using the **DNS-01** challenge, configured
+for Cloudflare in `traefik/traefik.yml`. Set `CF_DNS_API_TOKEN` in `.env` to a
+token scoped to *Zone → DNS → Edit* on that one zone.
 
-This is deliberate. The stack sits behind double NAT (LTE router → OPNsense), so
-Let's Encrypt's **HTTP-01 challenge can never reach port 80** from the internet.
+DNS-01 rather than HTTP-01 is deliberate, not a preference: this stack runs
+behind double NAT with no inbound reachability, so any challenge requiring
+Let's Encrypt to reach port 80 can never complete. DNS-01 only needs API access
+to the zone. Nothing has to be exposed to the internet.
 
-To move to real certificates later you need a registered domain whose DNS is
-hosted by a supported provider, then switch to **DNS-01** — which needs no
-inbound connectivity at all:
+Traefik requests one certificate per router hostname on demand, so no wildcard
+or `domains:` block is needed — which matters, because static config cannot read
+`${DOMAIN}`.
 
-1. Uncomment the `certificatesResolvers` block at the bottom of `traefik/traefik.yml`
-2. Set `certResolver: letsencrypt` under the `websecure` entrypoint
-3. Put the provider API token in `.env` and pass it to the `traefik` service in `docker-compose.yml`
+**The zone does not need public A records.** Only the temporary
+`_acme-challenge` TXT records Traefik writes and deletes itself. Keep the
+service hostnames in local DNS — on OPNsense, **Services → Unbound DNS →
+Overrides** — so the internal addressing is never published. Public name,
+private address.
 
-Do **not** switch back to `httpChallenge` — it will fail behind CGNAT.
+`bootstrap.sh` also generates `traefik/certs/local.crt`, a self-signed wildcard
+for `*.<domain>`. It is the fallback, not the main event: issuance is
+asynchronous and can fail, and `dynamic/tls.yml` sets `sniStrict`, which rejects
+any SNI matching no configured certificate. Without the fallback, a failed or
+pending ACME order means `ERR_SSL_UNRECOGNIZED_NAME_ALERT` rather than a
+warning. It is regenerated automatically when `DOMAIN` changes.
 
-`bootstrap.sh` generates `traefik/certs/local.crt` — a self-signed wildcard for
-`*.<domain>`, valid 10 years. It is required, not cosmetic: `dynamic/tls.yml`
-sets `sniStrict`, which rejects any SNI matching no configured certificate, so
-without it every request fails with a TLS `unrecognized_name` alert.
-
-To drop the browser warning, import that `.crt` into your OS or browser trust
-store — the certificate carries the correct `*.<domain>` SAN, so once trusted
-the padlock goes green.
+While testing, uncomment `caServer` in `traefik.yml` to use Let's Encrypt
+staging — issuance always succeeds there, so you can confirm the token and DNS
+plumbing without burning the production rate limit.
 
 ## Endpoints
 

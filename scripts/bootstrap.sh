@@ -63,25 +63,31 @@ if grep -q 'changeme@example.com' traefik/traefik.yml; then
   ok "ACME email set in traefik/traefik.yml"
 fi
 
-# ------------------------------------------------------------------ local TLS cert
-# Local mode has no ACME resolver, and traefik/dynamic/tls.yml sets
-# sniStrict — which rejects any SNI matching no configured certificate. Give
-# Traefik a self-signed wildcard so every *.${DOMAIN} host resolves to a
-# certificate with the right name. Import traefik/certs/local.crt into the
-# browser's trust store to drop the warning entirely.
-DOMAIN="${DOMAIN:-$(grep -E '^DOMAIN=' .env | cut -d= -f2-)}"
+# ------------------------------------------------------------------ fallback TLS cert
+# Real certificates come from Let's Encrypt, but issuance is asynchronous and
+# can fail (bad token, rate limit, DNS not propagated). dynamic/tls.yml sets
+# sniStrict, which rejects any SNI matching no configured certificate, so keep a
+# self-signed wildcard as the certificate that covers that gap. Regenerate it
+# whenever it no longer matches the configured domain.
 mkdir -p traefik/certs
+if [[ -s traefik/certs/local.crt ]] \
+  && ! openssl x509 -in traefik/certs/local.crt -noout -text 2>/dev/null \
+     | grep -qF "DNS:*.${DOMAIN}"; then
+  info "fallback certificate does not cover *.${DOMAIN} — regenerating"
+  rm -f traefik/certs/local.crt traefik/certs/local.key
+fi
 if [[ ! -s traefik/certs/local.crt ]]; then
   info "Generating self-signed wildcard certificate for *.${DOMAIN}"
   openssl req -x509 -nodes -newkey rsa:2048 -days 3650 \
     -keyout traefik/certs/local.key -out traefik/certs/local.crt \
     -subj "/CN=*.${DOMAIN}" \
     -addext "subjectAltName=DNS:*.${DOMAIN},DNS:${DOMAIN}" 2>/dev/null \
-    || { err "openssl failed to generate the local certificate"; exit 1; }
+    || { err "openssl failed to generate the fallback certificate"; exit 1; }
   ok "traefik/certs/local.crt generated for *.${DOMAIN} (valid 10 years)"
 fi
 chmod 644 traefik/certs/local.crt
 chmod 600 traefik/certs/local.key
+
 
 # ------------------------------------------------------------------ secrets
 info "Generating secrets (skipping any that already exist)"

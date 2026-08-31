@@ -37,17 +37,15 @@ entryPoints:
     http:
       middlewares:
         - security-headers@file
-      # LOCAL MODE (active): no certResolver, so Traefik serves its built-in
-      # self-signed certificate. Browsers warn on first visit — expected for a
-      # .lan domain that no public CA can validate. Everything else works.
+      # Certificates come from Let's Encrypt via DNS-01. Traefik requests one
+      # per router hostname on demand — no `domains:` block is needed, which
+      # matters because this file is static config and cannot read ${DOMAIN}.
       #
-      # This stack sits behind double NAT (LTE router -> OPNsense), so the
-      # Let's Encrypt HTTP-01 challenge can never reach port 80 from the
-      # internet. Switching to a real domain means DNS-01, not HTTP-01 —
-      # see the commented resolver below, then set here:
-      #   tls:
-      #     certResolver: letsencrypt
-      tls: {}
+      # Until a certificate is issued (or if ACME fails), the self-signed
+      # wildcard in dynamic/tls.yml is served instead, so `sniStrict` never
+      # rejects a request outright.
+      tls:
+        certResolver: letsencrypt
 
   # Internal-only entrypoint: Prometheus scrapes /metrics here, healthcheck
   # pings /ping here. Not published to the host.
@@ -60,24 +58,24 @@ metrics:
     addRoutersLabels: true
     addServicesLabels: true
 
-# Disabled in local mode. To enable, uncomment this block AND set
-# `certResolver: letsencrypt` on the websecure entrypoint above.
-#
-# dnsChallenge (not httpChallenge) is required because the stack has no public
-# inbound reachability. Example for Cloudflare: put CF_DNS_API_TOKEN in .env and
-# pass it into the traefik service's environment in docker-compose.yml.
-#
-# certificatesResolvers:
-#   letsencrypt:
-#     acme:
-#       email: "changeme@example.com"  # overwritten by bootstrap.sh from ACME_EMAIL
-#       storage: /acme/acme.json
-#       # Uncomment while testing to avoid Let's Encrypt rate limits:
-#       # caServer: https://acme-staging-v02.api.letsencrypt.org/directory
-#       dnsChallenge:
-#         provider: cloudflare
-#         resolvers:
-#           - "1.1.1.1:53"
+certificatesResolvers:
+  letsencrypt:
+    acme:
+      email: "changeme@example.com"  # overwritten by bootstrap.sh from ACME_EMAIL
+      storage: /acme/acme.json
+      # Uncomment while testing to avoid Let's Encrypt rate limits
+      # (certificates will be untrusted but issuance always succeeds):
+      # caServer: https://acme-staging-v02.api.letsencrypt.org/directory
+      #
+      # DNS-01, not HTTP-01: this stack sits behind double NAT (LTE router ->
+      # OPNsense) and has no inbound reachability, so a challenge that requires
+      # Let's Encrypt to reach port 80 can never succeed. DNS-01 only needs API
+      # access to the zone — see CF_DNS_API_TOKEN in .env.
+      dnsChallenge:
+        provider: cloudflare
+        resolvers:
+          - "1.1.1.1:53"
+          - "8.8.8.8:53"
 
 providers:
   docker:
