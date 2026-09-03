@@ -114,7 +114,7 @@ The default policy in [authelia/configuration.yml](authelia/configuration.yml) i
 
 ## Optional services (Compose profiles)
 
-Four popular homelab services ship disabled by default. Enable them by setting `COMPOSE_PROFILES` in `.env` (comma-separated) and running `docker compose up -d`, or ad hoc with `docker compose --profile <name> up -d`:
+Six optional services ship disabled by default. Enable them by setting `COMPOSE_PROFILES` in `.env` (comma-separated) and running `docker compose up -d`, or ad hoc with `docker compose --profile <name> up -d`:
 
 | Profile | Service | URL | Notes |
 |---|---|---|---|
@@ -122,6 +122,8 @@ Four popular homelab services ship disabled by default. Enable them by setting `
 | `adguard` | AdGuard Home | `https://adguard.<domain>` | Publishes port **53** on the host for DNS. During the first-run wizard, set the admin web port to **3000**. If systemd-resolved holds port 53, disable its stub listener first (`DNSStubListener=no` in `/etc/systemd/resolved.conf`). |
 | `ntfy` | Ntfy | `https://ntfy.<domain>` | Push notifications. **Not** behind Authelia (mobile apps can't follow SSO redirects) — its own auth defaults to deny-all; create users with `docker compose exec ntfy ntfy user add --role=admin <name>` |
 | `homepage` | Homepage | `https://home.<domain>` | Start-page dashboard, config in `homepage/config/`, behind Authelia |
+| `pve-exporter` | Proxmox exporter | — | Scrapes a Proxmox host into Prometheus. Needs an API token — see [docs/monitoring-targets.md](docs/monitoring-targets.md) |
+| `snmp-exporter` | SNMP exporter | — | Scrapes a managed switch into Prometheus (per-port traffic, link state) — see [docs/monitoring-targets.md](docs/monitoring-targets.md) |
 
 ## Adding a new service
 

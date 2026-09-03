@@ -26,3 +26,44 @@ scrape_configs:
   - job_name: grafana
     static_configs:
       - targets: ['grafana:3000']
+
+  # ---------------------------------------------------------------- external
+  # These two scrape machines outside this host, through an exporter that
+  # translates their protocol. Each needs its Compose profile enabled
+  # (pve-exporter / snmp-exporter) — otherwise the job simply shows as down.
+  #
+  # The targets below are addresses on your network: change them.
+  # The relabel block is the standard exporter pattern — the address being
+  # monitored travels as the `target` parameter, while the request itself goes
+  # to the exporter.
+
+  - job_name: proxmox
+    metrics_path: /pve
+    params:
+      module: [default]
+      cluster: ['1']
+      node: ['1']
+    static_configs:
+      - targets: ['192.168.200.10']   # Proxmox host
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: pve-exporter:9221
+
+  - job_name: switch
+    metrics_path: /snmp
+    params:
+      auth: [public_v2]     # community string; change if yours is not "public"
+      module: [if_mib]
+    static_configs:
+      - targets: ['192.168.200.2']    # managed switch
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: snmp-exporter:9116

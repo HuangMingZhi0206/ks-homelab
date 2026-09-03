@@ -351,3 +351,44 @@ services:
       traefik.http.routers.homepage.tls.certresolver: letsencrypt
       traefik.http.routers.homepage.middlewares: authelia@file
       traefik.http.services.homepage.loadbalancer.server.port: "3000"
+
+  # ==============================================================================
+  # Optional exporters — monitor machines outside this host
+  # ==============================================================================
+
+  # Proxmox VE: node CPU/RAM/storage plus per-VM and per-LXC state.
+  # Needs an API token on the Proxmox side; PVEAuditor is enough (read-only).
+  # See docs/monitoring-targets.md.
+  pve-exporter:
+    image: prompve/prometheus-pve-exporter:3.10.0
+    container_name: pve-exporter
+    restart: unless-stopped
+    profiles:
+      - pve-exporter
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - monitoring
+    environment:
+      - TZ=${TZ}
+      - PVE_USER=${PVE_USER:-prometheus@pve}
+      - PVE_TOKEN_NAME=${PVE_TOKEN_NAME:-}
+      - PVE_TOKEN_VALUE=${PVE_TOKEN_VALUE:-}
+      # Proxmox ships a self-signed certificate by default.
+      - PVE_VERIFY_SSL=${PVE_VERIFY_SSL:-false}
+
+  # Managed switches expose traffic and link state over SNMP but have no REST
+  # API, so this is the only way to graph per-port throughput. Uses the bundled
+  # if_mib module, which covers interface counters on essentially any switch.
+  snmp-exporter:
+    image: prom/snmp-exporter:v0.30.1
+    container_name: snmp-exporter
+    restart: unless-stopped
+    profiles:
+      - snmp-exporter
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - monitoring
+    environment:
+      - TZ=${TZ}
