@@ -36,7 +36,7 @@ Minimal X, no desktop environment:
 ```bash
 apt update && apt install --no-install-recommends -y \
   xserver-xorg-core xserver-xorg-input-libinput xinit x11-xserver-utils \
-  chromium unclutter openbox
+  chromium unclutter openbox xdotool
 ```
 
 `openbox` is not optional. Chromium's `--kiosk` relies on a window manager to be
@@ -55,15 +55,18 @@ The session script:
 #!/bin/sh
 # /home/kiosk/kiosk.sh
 xset -dpms; xset s off; xset s noblank
-unclutter -idle 0 &
+unclutter -idle 0 -root &
 openbox &
 sleep 2
+(sleep 5; xdotool mousemove 9999 9999) &
 exec chromium --kiosk --noerrdialogs --disable-infobars \
   --disable-session-crashed-bubble --check-for-update-interval=31536000 \
   "https://grafana.<domain>/d/<uid>/<slug>?orgId=1&refresh=60s&kiosk"
 ```
 
-`sleep 2` gives openbox time to come up first. `&kiosk` on the URL drops
+`sleep 2` gives openbox time to come up first. The pointer parks itself in the
+far corner five seconds in — `unclutter` alone sometimes leaves it sitting in the
+middle of the screen, covering a panel. `&kiosk` on the URL drops
 Grafana's menus and header; `&kiosk=tv` keeps the top bar. Prefer an explicit
 `refresh=60s` over `refresh=auto` on a screen that never sleeps.
 
@@ -119,6 +122,40 @@ getent hosts grafana.<domain>
 
 Without this the service runs correctly and displays a DNS error page, which
 looks nothing like a DNS problem.
+
+## Turning the panel off on a schedule
+
+The session disables DPMS so the screen never sleeps mid-day, which also means it
+cannot be blanked without re-enabling it first. This wrapper does both:
+
+```sh
+#!/bin/sh
+# /usr/local/bin/kiosk-screen
+export DISPLAY=:0 XAUTHORITY=/home/kiosk/.Xauthority
+case "$1" in
+  off) xset +dpms; xset dpms force off ;;
+  on)  xset -dpms; xset s off; xset s noblank; xset dpms force on ;;
+  *)   echo "usage: kiosk-screen on|off"; exit 1 ;;
+esac
+```
+
+```bash
+chmod +x /usr/local/bin/kiosk-screen
+```
+
+Overnight, via root's crontab:
+
+```
+0 23 * * * /usr/local/bin/kiosk-screen off
+0 7  * * * /usr/local/bin/kiosk-screen on
+```
+
+Only the panel is powered down — Chromium and the dashboard keep running, so the
+display is already current the moment it comes back rather than reloading.
+
+Worth doing less for the ~5-10 W than for the panel: a wall display otherwise
+shows the same layout continuously, and eight dark hours a night is cheap
+insurance against image retention.
 
 ## Diagnosing
 
