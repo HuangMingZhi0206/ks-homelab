@@ -316,6 +316,11 @@ services:
       - NTFY_CACHE_FILE=/var/cache/ntfy/cache.db
       - NTFY_AUTH_FILE=/var/lib/ntfy/auth.db
       - NTFY_AUTH_DEFAULT_ACCESS=deny-all
+      # A body larger than this is treated as an attachment, and attachments are
+      # off — so an oversized publish fails as "attachments not allowed" rather
+      # than anything mentioning size. Grafana webhook payloads carry the full
+      # alert JSON and blow past the 4K default, so raise it.
+      - NTFY_MESSAGE_SIZE_LIMIT=16384
     volumes:
       - ntfy_cache:/var/cache/ntfy
       - ntfy_data:/var/lib/ntfy
