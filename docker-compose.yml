@@ -11,6 +11,12 @@ networks:
     name: proxy
   monitoring:
     internal: true
+
+  # Exporters that scrape devices outside Docker — a hypervisor, a switch — need
+  # a route off the host, which `monitoring` deliberately does not have. They sit
+  # on both: this one to reach the device, `monitoring` to be scraped.
+  egress:
+
   authelia:
     internal: true
 
@@ -374,6 +380,7 @@ services:
       - no-new-privileges:true
     networks:
       - monitoring
+      - egress
     environment:
       - TZ=${TZ}
       - PVE_USER=${PVE_USER:-prometheus@pve}
@@ -395,5 +402,6 @@ services:
       - no-new-privileges:true
     networks:
       - monitoring
+      - egress
     environment:
       - TZ=${TZ}
