@@ -62,7 +62,7 @@ scrape_configs:
     metrics_path: /snmp
     params:
       auth: [public_v2]     # community string; change if yours is not "public"
-      module: [if_mib]
+      module: [switch_basic]
     static_configs:
       - targets: ['192.168.200.2']    # managed switch
     relabel_configs:

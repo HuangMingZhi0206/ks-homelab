@@ -57,38 +57,32 @@ address.
 The `if_mib` module is generic — it reads standard interface counters, so it
 works on essentially any managed switch, not just this one.
 
-### When the switch does not implement ifXTable
+### When the stock module times out
 
-`if_mib` walks both the 32-bit `ifTable` and the 64-bit `ifXTable`. Cheaper
-switches often implement only the former — and rather than answering "no such
-object", they go silent. The exporter retries, exhausts the scrape budget, and
-Prometheus reports `context deadline exceeded` or a bare 500. Nothing in either
-message suggests an unsupported table.
+`if_mib` walks the whole interface table — 22 columns. Small switches answer a
+single column instantly and then stop responding partway through a long walk,
+which surfaces only as a scrape timeout or a bare 500. Nothing points at the
+walk being too big.
 
-Check before assuming the network is at fault:
-
-```bash
-snmpwalk -v2c -c public <switch> 1.3.6.1.2.1.2.2.1.2      # ifTable — should answer
-snmpwalk -v2c -c public <switch> 1.3.6.1.2.1.31.1.1.1.6   # ifXTable — may time out
-```
-
-If the second times out, take the bundled config and drop that subtree from the
-walk list:
+Measure before assuming the network is at fault:
 
 ```bash
-mkdir -p monitoring/snmp
-docker compose cp snmp-exporter:/etc/snmp_exporter/snmp.yml monitoring/snmp/snmp.yml
-sed -i '/^  - 1\.3\.6\.1\.2\.1\.31\.1\.1$/d' monitoring/snmp/snmp.yml
-docker compose up -d --force-recreate snmp-exporter
+snmpwalk -v2c -c public <switch> 1.3.6.1.2.1.2.2.1.2   # one column
+snmpwalk -v2c -c public <switch> 1.3.6.1.2.1.2         # the whole table
 ```
 
-`docker-compose.yml` already mounts that path, so the file is picked up on
-recreate. Only the `walk` list changes; the metric definitions stay, and the
-ones that are no longer walked simply produce nothing.
+A device that answers the first and times out on the second cannot serve
+`if_mib`, and no timeout setting fixes that — the agent stops replying.
 
-You lose the 64-bit counters, which matters only on links fast enough to wrap a
-32-bit counter inside a scrape interval — about 5 minutes at gigabit. At a 60s
-interval on a home switch, the 32-bit counters are fine.
+`monitoring/snmp/snmp.yml` is the answer: a hand-written module that walks four
+columns instead of twenty-two — `ifDescr`, `ifOperStatus`, `ifInOctets`,
+`ifOutOctets`. Enough for per-port throughput and link state, which is what a
+switch is worth monitoring for. `max_repetitions` is also well below the default
+25, since small agents choke on large GETBULK responses.
+
+It uses 32-bit counters. Those wrap in about 5 minutes at gigabit, so at the 60s
+scrape interval here they are fine; on a busy uplink you would want the 64-bit
+ones, and a switch that cannot serve them.
 
 ## Turning them on
 
