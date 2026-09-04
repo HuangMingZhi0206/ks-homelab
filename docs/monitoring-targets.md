@@ -57,6 +57,39 @@ address.
 The `if_mib` module is generic — it reads standard interface counters, so it
 works on essentially any managed switch, not just this one.
 
+### When the switch does not implement ifXTable
+
+`if_mib` walks both the 32-bit `ifTable` and the 64-bit `ifXTable`. Cheaper
+switches often implement only the former — and rather than answering "no such
+object", they go silent. The exporter retries, exhausts the scrape budget, and
+Prometheus reports `context deadline exceeded` or a bare 500. Nothing in either
+message suggests an unsupported table.
+
+Check before assuming the network is at fault:
+
+```bash
+snmpwalk -v2c -c public <switch> 1.3.6.1.2.1.2.2.1.2      # ifTable — should answer
+snmpwalk -v2c -c public <switch> 1.3.6.1.2.1.31.1.1.1.6   # ifXTable — may time out
+```
+
+If the second times out, take the bundled config and drop that subtree from the
+walk list:
+
+```bash
+mkdir -p monitoring/snmp
+docker compose cp snmp-exporter:/etc/snmp_exporter/snmp.yml monitoring/snmp/snmp.yml
+sed -i '/^  - 1\.3\.6\.1\.2\.1\.31\.1\.1$/d' monitoring/snmp/snmp.yml
+docker compose up -d --force-recreate snmp-exporter
+```
+
+`docker-compose.yml` already mounts that path, so the file is picked up on
+recreate. Only the `walk` list changes; the metric definitions stay, and the
+ones that are no longer walked simply produce nothing.
+
+You lose the 64-bit counters, which matters only on links fast enough to wrap a
+32-bit counter inside a scrape interval — about 5 minutes at gigabit. At a 60s
+interval on a home switch, the 32-bit counters are fine.
+
 ## Turning them on
 
 ```bash

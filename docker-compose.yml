@@ -403,5 +403,11 @@ services:
     networks:
       - monitoring
       - egress
+    volumes:
+      # A trimmed copy of the bundled config. Switches that do not implement
+      # ifXTable simply stop answering rather than saying so, and the exporter
+      # then burns its whole scrape budget on retries — so the 64-bit counter
+      # OID is removed from the walk list. See docs/monitoring-targets.md.
+      - ./monitoring/snmp/snmp.yml:/etc/snmp_exporter/snmp.yml:ro
     environment:
       - TZ=${TZ}
