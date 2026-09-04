@@ -54,6 +54,11 @@ scrape_configs:
         replacement: pve-exporter:9221
 
   - job_name: switch
+    # An SNMP walk of if_mib across every port is slow on a small switch — well
+    # past the 10s default, which surfaces only as "context deadline exceeded".
+    # Polling interface counters every 15s is pointless anyway.
+    scrape_interval: 60s
+    scrape_timeout: 30s
     metrics_path: /snmp
     params:
       auth: [public_v2]     # community string; change if yours is not "public"
