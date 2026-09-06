@@ -118,7 +118,7 @@ The default policy in [authelia/configuration.yml](authelia/configuration.yml) i
 
 ## Optional services (Compose profiles)
 
-Six optional services ship disabled by default. Enable them by setting `COMPOSE_PROFILES` in `.env` (comma-separated) and running `docker compose up -d`, or ad hoc with `docker compose --profile <name> up -d`:
+Seven optional services ship disabled by default. Enable them by setting `COMPOSE_PROFILES` in `.env` (comma-separated) and running `docker compose up -d`, or ad hoc with `docker compose --profile <name> up -d`:
 
 | Profile | Service | URL | Notes |
 |---|---|---|---|
@@ -128,6 +128,7 @@ Six optional services ship disabled by default. Enable them by setting `COMPOSE_
 | `homepage` | Homepage | `https://home.<domain>` | Start-page dashboard, config in `homepage/config/`, behind Authelia |
 | `pve-exporter` | Proxmox exporter | — | Scrapes a Proxmox host into Prometheus. Needs an API token — see [docs/monitoring-targets.md](docs/monitoring-targets.md) |
 | `snmp-exporter` | SNMP exporter | — | Scrapes a managed switch into Prometheus (per-port traffic, link state) — see [docs/monitoring-targets.md](docs/monitoring-targets.md) |
+| `filebrowser` | Filebrowser | `https://files.<domain>` | Web file manager for the USB disk on the host. Set `STORAGE_PATH` and mount the disk first — see [docs/storage.md](docs/storage.md) |
 
 ## Adding a new service
 

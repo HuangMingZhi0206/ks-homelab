@@ -128,3 +128,52 @@ Memastikan share-nya benar-benar dilayani, dijalankan dari Windows:
 ```bash
 net view \\192.168.200.11
 ```
+
+## Akses lewat browser (Filebrowser)
+
+SMB nyaman dari Windows tapi canggung dari HP. Filebrowser memberi antarmuka web
+di atas folder yang sama — telusuri, unduh, unggah, pratinjau foto.
+
+Dia berjalan sebagai profil opsional di stack ini:
+
+```bash
+# di .env
+COMPOSE_PROFILES=...,filebrowser
+STORAGE_PATH=/srv/hdd
+```
+
+```bash
+docker compose up -d filebrowser
+```
+
+Lalu tambahkan override Unbound di OPNsense untuk `files.lab.syonin.site` →
+`192.168.200.11`, sama seperti hostname lab lainnya.
+
+**Ini sengaja tidak dibuka ke internet.** Tidak ada catatan DNS publik dan tidak
+ada Cloudflare Tunnel. Dari luar rumah, jangkau lewat Tailscale — persis seperti
+Grafana. Alasannya bukan kemalasan: share ini berisi seluruh arsip foto
+keluarga, dan pengelola berkas yang menghadap internet adalah sasaran yang jauh
+lebih besar daripada sebuah dasbor.
+
+Login pertama: Filebrowser membuat user `admin` dengan sandi acak yang dicetak
+ke lognya.
+
+```bash
+docker compose logs filebrowser | head -20
+```
+
+Ganti sandinya lewat Settings begitu masuk. Authelia sudah menjaga di depan,
+tapi lapisan kedua ini yang menahan kalau suatu saat label middleware-nya
+terhapus tanpa sengaja.
+
+### Kalau isinya terlihat kosong
+
+Filebrowser akan dengan senang hati menyajikan direktori kosong kalau disknya
+belum ter-mount di host. Itu tampak seperti data hilang, padahal bukan. Periksa
+dulu di Pi:
+
+```bash
+df -h /srv/hdd
+```
+
+Harus menunjuk `/dev/sda1`, bukan `/dev/nvme0n1p2`.

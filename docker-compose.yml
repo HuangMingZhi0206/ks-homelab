@@ -43,6 +43,7 @@ volumes:
   adguard_conf:
   ntfy_cache:
   ntfy_data:
+  filebrowser_data:
 
 services:
   # ==============================================================================
@@ -411,3 +412,38 @@ services:
       - ./monitoring/snmp/snmp.yml:/etc/snmp_exporter/snmp.yml:ro
     environment:
       - TZ=${TZ}
+
+  # ==============================================================================
+  # Filebrowser — web UI for the USB disk mounted on the host
+  # ==============================================================================
+  # Deliberately has no public DNS record, exactly like the rest of lab.<domain>.
+  # From outside the house you reach it over Tailscale, not over the internet —
+  # this share holds every family photo, and a browser-facing file manager is a
+  # much larger target than a dashboard. See docs/storage.md.
+  filebrowser:
+    image: filebrowser/filebrowser:v2.63.23
+    container_name: filebrowser
+    restart: unless-stopped
+    profiles:
+      - filebrowser
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - proxy
+    volumes:
+      # The host mount point of the disk. ntfs3 maps every file to uid/gid 1000
+      # regardless of what the container runs as, so there is nothing to align.
+      - ${STORAGE_PATH:-/srv/hdd}:/srv
+      - filebrowser_data:/database
+    environment:
+      - TZ=${TZ}
+      - FB_DATABASE=/database/filebrowser.db
+      - FB_ROOT=/srv
+      - FB_PORT=80
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.filebrowser.rule: Host(`files.${DOMAIN}`)
+      traefik.http.routers.filebrowser.entrypoints: websecure
+      traefik.http.routers.filebrowser.tls.certresolver: letsencrypt
+      traefik.http.routers.filebrowser.middlewares: authelia@file
+      traefik.http.services.filebrowser.loadbalancer.server.port: "80"
