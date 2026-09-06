@@ -35,7 +35,8 @@ docker-compose.yaml
 README.md
 ```
 
-`docker-compose.yaml` — **namanya harus `.yaml`**, Coolify tidak mengenali `.yml`:
+`docker-compose.yaml` — nama ini yang dicari Coolify secara bawaan. Kalau repo
+Anda memakai `.yml`, sesuaikan kolom **Docker compose location** di resource-nya:
 
 ```yaml
 services:
@@ -135,9 +136,10 @@ Sekitar tiga puluh detik, tanpa build ulang.
 Danger Zone → Change visibility → Public. Kalau memang harus privat, jalankan
 `docker login ghcr.io` di VM Coolify supaya daemon-nya punya kredensial.
 
-**"Failed to read the Docker Compose file from the repository."** Hampir selalu
-nama berkas: Coolify mencari `docker-compose.yaml`, bukan `.yml`. Periksa juga
-branch — Coolify default ke `main`, sementara repo lama sering `master`.
+**"Failed to read the Docker Compose file from the repository."** Tiga sebab,
+urut dari yang paling sering: berkasnya belum di-push ke GitHub; namanya `.yml`
+sementara kolom Docker compose location menyebut `.yaml` (atau sebaliknya); atau
+branch-nya tidak cocok — Coolify default ke `main`, repo lama sering `master`.
 
 **404 padahal deploy sukses.** Domain yang sama masih terpasang di resource
 lain. Satu domain hanya boleh dipegang satu resource; kosongkan di yang lama
