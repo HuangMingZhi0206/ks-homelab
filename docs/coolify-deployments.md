@@ -163,3 +163,58 @@ selalu ditolak `Invalid signature`. Yang sudah terbukti bukan penyebabnya:
 Cloudflare Tunnel dan Access, ukuran payload, header delivery, nilai secret di
 sisi Coolify, dan App-nya sendiri. Jangan mengulang lima langkah itu. Deploy
 ditekan manual, dan itu memang pilihan yang disengaja sekarang.
+
+## Database
+
+Pakai resource **PostgreSQL** milik Coolify, bukan layanan `db` di dalam compose
+aplikasi. Alasannya: datanya tidak ikut nasib aplikasi saat redeploy, dan tab
+Backups memberi jadwal otomatis yang tidak dimiliki layanan compose.
+
+Empat hal yang menentukan, dan tiga di antaranya hanya bisa diatur sekali:
+
+**Kredensial hanya dibaca saat inisialisasi pertama.** Username, password, dan
+Initial database dibakukan ketika container pertama kali start. Ubah sebelum
+menekan Start; sesudahnya, mengubahnya di Coolify tidak berpengaruh pada data
+yang sudah ada. Ganti Initial database dari `postgres` ke nama aplikasinya —
+`postgres` itu database pemeliharaan server, bukan tempat data.
+
+**SSL biarkan Disabled.** Postgres Coolify tidak menyajikan SSL. Kode yang
+memaksa SSL (biasanya warisan dari Supabase) harus dibuat kondisional.
+
+**Environment variable `DATABASE_URL`: matikan Interpolation.** Sandi buatan
+Coolify bisa mengandung `$`; dengan interpolasi menyala, Coolify memotongnya di
+situ dan sambungan gagal dengan pesan autentikasi yang menyesatkan.
+
+**Aplikasi harus satu jaringan dengan database.** Resource compose mendapat
+jaringan Docker sendiri, sementara database ada di jaringan `coolify`. Tanpa
+disamakan, gejalanya `getaddrinfo EAI_AGAIN <nama-container-db>` dan seluruh
+endpoint API menjawab 500 walau halaman depan tampil normal. Perbaikannya:
+aplikasi → Advanced → **Connect to Predefined Network** → Redeploy.
+
+### Memindahkan data dari Supabase
+
+Sambungan langsung `db.<ref>.supabase.co` sekarang **IPv6-saja**, dan VM ini
+tidak punya jalur IPv6 — hasilnya `Network unreachable`. Pakai connection string
+**Session pooler** (`aws-0-<region>.pooler.supabase.com`, port 5432) yang punya
+IPv4. Jangan yang port 6543; transaction pooler tidak mendukung `pg_dump`.
+
+```bash
+docker run --rm postgres:18-alpine pg_dump "<session-pooler-url>" > /root/dump.sql
+docker exec -i <container-db> psql -U <user> -d <database> < /root/dump.sql
+```
+
+`docker exec` dipakai supaya tidak perlu memikirkan jaringan mana yang bisa
+menjangkau database.
+
+Restore-nya akan memuntahkan ratusan baris `ERROR: role "supabase_admin" does
+not exist`, `extension "supabase_vault" is not available`, dan sejenisnya.
+Semua itu bagian internal Supabase yang tidak dipakai aplikasi — **abaikan**.
+Yang menandakan berhasil adalah baris `COPY <angka>` dan deretan `setval`.
+Kegagalan `ALTER TABLE ... OWNER TO postgres` juga menguntungkan: tabelnya tetap
+dimiliki user aplikasi.
+
+Verifikasi sebelum melanjutkan:
+
+```bash
+docker exec -i <container-db> psql -U <user> -d <database> -c "\dt"
+```
