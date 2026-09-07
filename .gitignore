@@ -15,3 +15,18 @@ homepage/config/logs/
 .DS_Store
 Thumbs.db
 traefik/traefik.yml
+
+# Home Assistant runtime state (config YAML itself stays tracked)
+homeassistant/config/.storage/
+homeassistant/config/.cloud/
+homeassistant/config/deps/
+homeassistant/config/tts/
+homeassistant/config/backups/
+homeassistant/config/blueprints/
+homeassistant/config/custom_components/
+homeassistant/config/*.db
+homeassistant/config/*.db-*
+homeassistant/config/*.log
+homeassistant/config/*.log.*
+homeassistant/config/.HA_VERSION
+homeassistant/config/.uuid

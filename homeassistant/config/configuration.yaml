@@ -1,0 +1,81 @@
+# Home Assistant — configuration for the container install (not HAOS).
+
+default_config:
+
+automation: !include automations.yaml
+script: !include scripts.yaml
+scene: !include scenes.yaml
+
+# REQUIRED behind Traefik. Without this, Home Assistant sees the
+# X-Forwarded-For header Traefik adds, decides it came from an untrusted
+# proxy, and answers every request with "400: Bad Request" — including the
+# onboarding screen, so you can never log in to fix it from the UI.
+# 172.16.0.0/12 is Docker's default bridge range.
+http:
+  use_x_forwarded_for: true
+  trusted_proxies:
+    - 172.16.0.0/12
+
+# ---------------------------------------------------------------------------
+# System sensors, read from Prometheus.
+#
+# The obvious approach — Home Assistant's System Monitor integration — does
+# not work here: a container sees its own /proc and cgroup, not the host's, so
+# it would report the container's view rather than the Pi's. Prometheus already
+# scrapes node-exporter on this host, so ask it instead. Home Assistant and
+# Prometheus both sit on the `proxy` network, which is why this name resolves.
+#
+# VERIFY THE METRIC NAMES against your own Prometheus before trusting these —
+# node_thermal_zone_temp in particular is ARM-specific and the zone label
+# varies. Open https://prometheus.<domain> and run the query by hand.
+# ---------------------------------------------------------------------------
+sensor:
+  - platform: rest
+    name: Pi CPU Temperature
+    unique_id: pi_cpu_temperature
+    resource: http://prometheus:9090/api/v1/query
+    params:
+      query: 'node_thermal_zone_temp{zone="0"}'
+    value_template: "{{ value_json.data.result[0].value[1] | float | round(1) }}"
+    unit_of_measurement: "°C"
+    device_class: temperature
+    scan_interval: 60
+
+  - platform: rest
+    name: Pi Memory Used
+    unique_id: pi_memory_used
+    resource: http://prometheus:9090/api/v1/query
+    params:
+      query: '(1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100'
+    value_template: "{{ value_json.data.result[0].value[1] | float | round(0) }}"
+    unit_of_measurement: "%"
+    scan_interval: 60
+
+  - platform: rest
+    name: Pi NVMe Free
+    unique_id: pi_nvme_free
+    resource: http://prometheus:9090/api/v1/query
+    params:
+      query: 'node_filesystem_avail_bytes{mountpoint="/",fstype!="tmpfs"}'
+    value_template: "{{ (value_json.data.result[0].value[1] | float / 1024**3) | round(1) }}"
+    unit_of_measurement: "GB"
+    scan_interval: 300
+
+  - platform: rest
+    name: HDD Free
+    unique_id: hdd_free
+    resource: http://prometheus:9090/api/v1/query
+    params:
+      query: 'node_filesystem_avail_bytes{mountpoint="/srv/hdd"}'
+    value_template: "{{ (value_json.data.result[0].value[1] | float / 1024**3) | round(1) }}"
+    unit_of_measurement: "GB"
+    scan_interval: 300
+
+  - platform: rest
+    name: Pi Load
+    unique_id: pi_load
+    resource: http://prometheus:9090/api/v1/query
+    params:
+      query: 'node_load1'
+    value_template: "{{ value_json.data.result[0].value[1] | float | round(2) }}"
+    scan_interval: 60
