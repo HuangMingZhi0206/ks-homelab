@@ -158,8 +158,15 @@ STORAGE_PATH=/srv/hdd
 docker compose up -d filebrowser
 ```
 
-Lalu tambahkan override Unbound di OPNsense untuk `files.lab.syonin.site` →
-`192.168.200.11`, sama seperti hostname lab lainnya.
+Tidak perlu menambahkan apa pun di DNS. Wildcard Unbound yang sudah ada
+(`*` -> `lab.syonin.site` -> `192.168.200.11`) sudah mencakup nama ini.
+
+**Jangan menambahkan host override spesifik di bawah zona itu.** Wildcard
+membuat Unbound memperlakukannya sebagai *redirect zone*, dan di zona semacam
+itu semua local-data harus berada di puncak zona. Menambahkan satu nama saja
+menghasilkan `local-data in redirect zone must reside at top of zone` lalu
+`Could not set up local zones` — Unbound gagal start dan **seluruh DNS rumah
+mati**, bukan cuma nama barunya.
 
 **Ini sengaja tidak dibuka ke internet.** Tidak ada catatan DNS publik dan tidak
 ada Cloudflare Tunnel. Dari luar rumah, jangkau lewat Tailscale — persis seperti

@@ -56,7 +56,74 @@ dipatok: dia sensitif latensi tapi murah.
 Konsekuensinya inferensi jadi sekitar setengah kecepatan. Untuk pertanyaan
 sependek "suhu berapa", selisih itu tidak terasa.
 
-## Menyalakan
+## Tahap 0: Home Assistant + Ollama saja, lewat teks
+
+Selama belum ada mic dan speaker, Whisper dan Piper tidak ada gunanya — jangan
+dinyalakan dulu. Assist bekerja dengan **mengetik** di web UI, dan itu cukup
+untuk menguji seluruh lapisan yang penting: apakah sensornya benar, dan apakah
+model paham cara kamu bertanya dalam Bahasa Indonesia.
+
+```bash
+# di .env
+COMPOSE_PROFILES=...,voice
+```
+
+```bash
+docker compose up -d homeassistant
+docker compose logs -f homeassistant        # tunggu "Home Assistant initialized"
+```
+
+Buka `https://ha.<domain>`, selesaikan onboarding, lalu **nyalakan 2FA** di
+Profile → Multi-factor authentication (router ini tidak di belakang Authelia,
+jadi login HA adalah satu-satunya penjaga).
+
+Periksa dulu kelima sensor Prometheus muncul dengan angka, bukan `unavailable`:
+**Developer tools → States**, cari `sensor.pi_`. Yang `unavailable` berarti
+kuerinya tidak mengembalikan apa pun — betulkan nama metriknya di
+`configuration.yaml`.
+
+### Ollama
+
+Unduhan modelnya ~1 GB lewat koneksi LTE. Lakukan dengan sadar, bukan sambil
+mengerjakan hal lain yang butuh bandwidth.
+
+```bash
+docker compose up -d ollama
+docker compose exec ollama ollama pull qwen2.5:1.5b
+docker compose exec ollama ollama run qwen2.5:1.5b "Jawab singkat: apa itu NVMe?"
+```
+
+Kalau jawabannya keluar, model sudah sehat. Lalu di Home Assistant:
+
+1. **Settings → Devices & Services → Add Integration → Ollama**
+2. URL: `http://ollama:11434`
+3. Model: `qwen2.5:1.5b`
+4. Di opsi integrasinya, aktifkan **Assist** dan izinkan mengontrol Home
+   Assistant — tanpa itu model tidak punya akses ke sensor apa pun dan hanya
+   akan mengarang.
+5. **Settings → Voice assistants**: buat asisten baru, conversation agent-nya
+   Ollama. Biarkan STT dan TTS kosong.
+
+Uji dengan mengetik di ikon Assist (pojok kanan atas). Bandingkan dengan
+asisten bawaan: buat dua asisten, satu Ollama satu Assist bawaan, tanyakan hal
+yang sama, lihat mana yang lebih tepat. Untuk pertanyaan angka, yang bawaan
+biasanya menang — dan itu memang kesimpulan yang diharapkan.
+
+### Ekspektasi kecepatan
+
+Dengan `cpuset: "2,3"` dan model 1,5 B di Pi 5, hitungan detik per jawaban,
+bukan di bawah satu detik. Pertanyaan pertama setelah `pull` lebih lama karena
+model dimuat ke memori; sesudahnya tetap tinggal di sana karena
+`OLLAMA_KEEP_ALIVE=-1`.
+
+Sambil menguji, pantau apakah Pi kewalahan:
+
+```bash
+docker stats --no-stream
+vcgencmd get_throttled        # bukan 0x0 = sudah kena undervoltage/throttle
+```
+
+## Menyalakan pipeline suara lengkap (kalau mic dan speaker sudah ada)
 
 ```bash
 # di .env
@@ -68,9 +135,15 @@ docker compose up -d homeassistant wyoming-whisper wyoming-piper
 docker compose logs -f homeassistant
 ```
 
-Tambahkan override Unbound di OPNsense untuk `ha.lab.syonin.site` →
-`192.168.200.11`, sama seperti hostname lab lainnya. Lalu buka
-`https://ha.<domain>` dan selesaikan onboarding.
+Tidak perlu menambahkan apa pun di DNS. Wildcard Unbound yang sudah ada
+(`*` -> `lab.syonin.site` -> `192.168.200.11`) sudah mencakup nama ini.
+
+**Jangan menambahkan host override spesifik di bawah zona itu.** Wildcard
+membuat Unbound memperlakukannya sebagai *redirect zone*, dan di zona semacam
+itu semua local-data harus berada di puncak zona. Menambahkan satu nama saja
+menghasilkan `local-data in redirect zone must reside at top of zone` lalu
+`Could not set up local zones` — Unbound gagal start dan **seluruh DNS rumah
+mati**, bukan cuma nama barunya.
 
 Whisper dan Piper mengunduh modelnya sendiri saat start pertama, jadi biarkan
 beberapa menit dan pantau lognya.
