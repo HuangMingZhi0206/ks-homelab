@@ -36,7 +36,7 @@ sensor:
     resource: http://prometheus:9090/api/v1/query
     params:
       query: 'node_thermal_zone_temp{zone="0"}'
-    value_template: "{{ value_json.data.result[0].value[1] | float | round(1) }}"
+    value_template: "{% set r = value_json.data.result %}{{ (r[0].value[1] | float | round(1)) if r | count > 0 }}"
     unit_of_measurement: "°C"
     device_class: temperature
     scan_interval: 60
@@ -47,7 +47,7 @@ sensor:
     resource: http://prometheus:9090/api/v1/query
     params:
       query: '(1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100'
-    value_template: "{{ value_json.data.result[0].value[1] | float | round(0) }}"
+    value_template: "{% set r = value_json.data.result %}{{ (r[0].value[1] | float | round(0)) if r | count > 0 }}"
     unit_of_measurement: "%"
     scan_interval: 60
 
@@ -57,7 +57,7 @@ sensor:
     resource: http://prometheus:9090/api/v1/query
     params:
       query: 'node_filesystem_avail_bytes{mountpoint="/",fstype!="tmpfs"}'
-    value_template: "{{ (value_json.data.result[0].value[1] | float / 1024**3) | round(1) }}"
+    value_template: "{% set r = value_json.data.result %}{{ ((r[0].value[1] | float / 1024**3) | round(1)) if r | count > 0 }}"
     unit_of_measurement: "GB"
     scan_interval: 300
 
@@ -67,7 +67,7 @@ sensor:
     resource: http://prometheus:9090/api/v1/query
     params:
       query: 'node_filesystem_avail_bytes{mountpoint="/srv/hdd"}'
-    value_template: "{{ (value_json.data.result[0].value[1] | float / 1024**3) | round(1) }}"
+    value_template: "{% set r = value_json.data.result %}{{ ((r[0].value[1] | float / 1024**3) | round(1)) if r | count > 0 }}"
     unit_of_measurement: "GB"
     scan_interval: 300
 
@@ -77,5 +77,5 @@ sensor:
     resource: http://prometheus:9090/api/v1/query
     params:
       query: 'node_load1'
-    value_template: "{{ value_json.data.result[0].value[1] | float | round(2) }}"
+    value_template: "{% set r = value_json.data.result %}{{ (r[0].value[1] | float | round(2)) if r | count > 0 }}"
     scan_interval: 60
