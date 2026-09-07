@@ -1,0 +1,39 @@
+# File Browser Quantum — configuration.
+# Targets the 1.5.x stable line. NOTE: filebrowserquantum.com defaults to the
+# v2.0.0 docs; use the site's version switcher for 1.5.x when troubleshooting.
+
+server:
+  port: 80
+  # One source: the USB disk, bind-mounted at /folder by docker-compose.yml.
+  # Never point a source at "/" or "/var" — the project warns against it.
+  sources:
+    - path: /folder
+      name: HDD
+
+auth:
+  # Admin rights are granted to the proxy user whose name matches this.
+  # Keep it equal to the Authelia username in authelia/users_database.yml.
+  adminUsername: admin
+
+  methods:
+    # Trust the username Authelia puts in a header, so there is no second
+    # login: Traefik -> Authelia -> this app, already authenticated.
+    #
+    # Authelia's forwardAuth returns Remote-User (see
+    # traefik/dynamic/middlewares.yml authResponseHeaders). The upstream docs
+    # example says X-Forwarded-User, which Authelia does NOT send.
+    #
+    # SECURITY: with this on, the app blindly trusts the header. Anything that
+    # can reach it bypassing Traefik can log in as any user. That is why this
+    # container publishes no ports and sits only on the `proxy` network —
+    # Traefik is the only thing that can talk to it. Do not add a ports: entry.
+    proxy:
+      enabled: true
+      header: Remote-User
+
+    # Password login is deliberately left enabled as a way back in if the
+    # header ever stops arriving. Change the default admin/admin password on
+    # first login, then disable this if you want header auth to be the only
+    # path.
+    password:
+      enabled: true

@@ -129,12 +129,24 @@ Memastikan share-nya benar-benar dilayani, dijalankan dari Windows:
 net view \\192.168.200.11
 ```
 
-## Akses lewat browser (Filebrowser)
+## Akses lewat browser (File Browser Quantum)
 
-SMB nyaman dari Windows tapi canggung dari HP. Filebrowser memberi antarmuka web
-di atas folder yang sama — telusuri, unduh, unggah, pratinjau foto.
+SMB nyaman dari Windows tapi canggung dari HP. Aplikasi ini memberi antarmuka
+web di atas folder yang sama — telusuri, unduh, unggah, pratinjau.
 
-Dia berjalan sebagai profil opsional di stack ini:
+Yang dipakai adalah **File Browser Quantum** (`gtstef/filebrowser`), fork dari
+Filebrowser asli. Alasan memilih fork, bukan yang asli:
+
+- Thumbnail untuk video, dokumen Office, dan album art; pencarian terindeks
+  yang jalan saat kamu mengetik.
+- **Proxy auth** — dia percaya header `Remote-User` dari Authelia, jadi tidak
+  ada login kedua.
+- Fitur **menjalankan perintah shell** milik Filebrowser asli dihapus total.
+  Fitur itu mengubah setiap celah auth menjadi eksekusi kode di Pi.
+
+Konfigurasinya ada di [`filebrowser/config.yaml`](../filebrowser/config.yaml) —
+path sumber dan header auth diatur di sana, bukan lewat variabel lingkungan
+seperti Filebrowser lama.
 
 ```bash
 # di .env
@@ -155,20 +167,42 @@ Grafana. Alasannya bukan kemalasan: share ini berisi seluruh arsip foto
 keluarga, dan pengelola berkas yang menghadap internet adalah sasaran yang jauh
 lebih besar daripada sebuah dasbor.
 
-Login pertama: Filebrowser membuat user `admin` dengan sandi acak yang dicetak
-ke lognya.
+### Jangan pernah menambahkan `ports:` ke service ini
+
+Proxy auth berarti aplikasi **mempercayai header `Remote-User` tanpa
+memverifikasi apa pun**. Kalau ada yang bisa menjangkaunya tanpa lewat Traefik,
+dia bisa masuk sebagai user mana pun hanya dengan mengirim header itu. Karena
+itu container ini tidak mempublikasikan port apa pun dan hanya ada di network
+`proxy` — Traefik satu-satunya yang bisa bicara dengannya. Ini bukan pengetatan
+opsional; ini yang membuat proxy auth aman.
+
+### Pemeriksaan pada login pertama
+
+Versi 1.5.x memakai `admin`/`admin` sebagai kredensial awal, jadi dua hal ini
+wajib dikerjakan begitu masuk:
+
+1. **Pastikan proxy auth benar-benar aktif.** Buka `https://files.<domain>`
+   setelah login di Authelia — seharusnya kamu masuk **tanpa** melihat form
+   login. Kalau form login muncul, config-nya tidak terbaca (lihat di bawah).
+2. **Ganti sandi `admin`.** Login sandi sengaja dibiarkan aktif sebagai jalan
+   masuk cadangan kalau header berhenti terkirim, tapi `admin/admin` tidak
+   boleh dibiarkan. Setelah proxy auth terbukti jalan, kamu boleh mematikan
+   `auth.methods.password.enabled`.
+
+Kalau form login tetap muncul, periksa config-nya benar-benar termuat:
 
 ```bash
-docker compose logs filebrowser | head -20
+docker compose exec filebrowser cat /home/filebrowser/data/config.yaml | head -5
+docker compose logs filebrowser | grep -i -e config -e auth | head -20
 ```
 
-Ganti sandinya lewat Settings begitu masuk. Authelia sudah menjaga di depan,
-tapi lapisan kedua ini yang menahan kalau suatu saat label middleware-nya
-terhapus tanpa sengaja.
+Path data pada baris `volumes` mengikuti dokumentasi resmi. Kalau versi
+1.5.x-mu ternyata mengharapkan lokasi lain, log-nya akan menyebutkan path yang
+dia baca — sesuaikan bind mount-nya, satu baris.
 
 ### Kalau isinya terlihat kosong
 
-Filebrowser akan dengan senang hati menyajikan direktori kosong kalau disknya
+Aplikasi ini akan dengan senang hati menyajikan direktori kosong kalau disknya
 belum ter-mount di host. Itu tampak seperti data hilang, padahal bukan. Periksa
 dulu di Pi:
 
@@ -178,6 +212,12 @@ df -h /srv/hdd
 
 Harus menunjuk `/dev/sda1`, bukan `/dev/nvme0n1p2`.
 
+### Kembali ke Filebrowser lama
+
+Volume `filebrowser_data` milik aplikasi lama **tidak disentuh** — Quantum
+memakai volume baru `filebrowser_quantum_data`. Jadi rollback cukup dengan
+memulihkan blok service lama dari riwayat git; akun dan pengaturan lamamu masih
+utuh di sana.
 ## Nextcloud di atas disk yang sama (profile `nextcloud`)
 
 Nextcloud memakai disk ini sebagai **External Storage**, bukan sebagai data

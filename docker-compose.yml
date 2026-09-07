@@ -52,6 +52,7 @@ volumes:
   ntfy_cache:
   ntfy_data:
   filebrowser_data:
+  filebrowser_quantum_data:
   nextcloud_html:
   nextcloud_data:
   nextcloud_db:
@@ -426,14 +427,25 @@ services:
       - TZ=${TZ}
 
   # ==============================================================================
-  # Filebrowser — web UI for the USB disk mounted on the host
+  # File Browser Quantum — web UI for the USB disk mounted on the host
   # ==============================================================================
+  # A fork of Filebrowser, swapped in for the nicer UI: thumbnails for video and
+  # office files, indexed search, and proxy auth so Authelia stays the only
+  # login. It also removes Filebrowser's shell-command feature outright, which
+  # had turned any auth slip into code execution on this host.
+  #
+  # Config lives in ./filebrowser/config.yaml — the source path and the proxy
+  # header are set there, not through env vars.
+  #
+  # No `ports:` entry, ever. Proxy auth means this app trusts the Remote-User
+  # header blindly, so Traefik must be the only thing that can reach it.
+  #
   # Deliberately has no public DNS record, exactly like the rest of lab.<domain>.
   # From outside the house you reach it over Tailscale, not over the internet —
   # this share holds every family photo, and a browser-facing file manager is a
   # much larger target than a dashboard. See docs/storage.md.
   filebrowser:
-    image: filebrowser/filebrowser:v2.63.23
+    image: gtstef/filebrowser:1.5.6-stable
     container_name: filebrowser
     restart: unless-stopped
     profiles:
@@ -445,13 +457,14 @@ services:
     volumes:
       # The host mount point of the disk. ntfs3 maps every file to uid/gid 1000
       # regardless of what the container runs as, so there is nothing to align.
-      - ${STORAGE_PATH:-/srv/hdd}:/srv
-      - filebrowser_data:/database
+      - ${STORAGE_PATH:-/srv/hdd}:/folder
+      # Its own sqlite database and thumbnail cache. A NEW volume, not the old
+      # filebrowser_data: that one still holds the previous app's BoltDB, so
+      # rolling back means restoring the old service block and nothing else.
+      - filebrowser_quantum_data:/home/filebrowser/data
+      - ./filebrowser/config.yaml:/home/filebrowser/data/config.yaml:ro
     environment:
       - TZ=${TZ}
-      - FB_DATABASE=/database/filebrowser.db
-      - FB_ROOT=/srv
-      - FB_PORT=80
     labels:
       traefik.enable: "true"
       traefik.http.routers.filebrowser.rule: Host(`files.${DOMAIN}`)

@@ -18,6 +18,7 @@ Production-ready Docker Compose homelab: **Traefik v3** (reverse proxy + automat
 │       ├── provisioning/         # Auto-provisioned datasource + dashboard loader
 │       └── dashboards/           # Dashboard JSON (Homelab Overview included)
 ├── homepage/config/              # Homepage dashboard config (optional service)
+├── filebrowser/config.yaml       # File Browser Quantum config (optional service)
 ├── scripts/
 │   ├── bootstrap.sh              # One-shot setup: secrets, users, launch
 │   ├── backup.sh                 # Volume + config backup (restic or local tar)
@@ -128,7 +129,7 @@ Eight optional services ship disabled by default. Enable them by setting `COMPOS
 | `homepage` | Homepage | `https://home.<domain>` | Start-page dashboard, config in `homepage/config/`, behind Authelia |
 | `pve-exporter` | Proxmox exporter | — | Scrapes a Proxmox host into Prometheus. Needs an API token — see [docs/monitoring-targets.md](docs/monitoring-targets.md) |
 | `snmp-exporter` | SNMP exporter | — | Scrapes a managed switch into Prometheus (per-port traffic, link state) — see [docs/monitoring-targets.md](docs/monitoring-targets.md) |
-| `filebrowser` | Filebrowser | `https://files.<domain>` | Web file manager for the USB disk on the host. Set `STORAGE_PATH` and mount the disk first — see [docs/storage.md](docs/storage.md) |
+| `filebrowser` | File Browser Quantum | `https://files.<domain>` | Web file manager for the USB disk on the host, with thumbnails and indexed search. Uses proxy auth so Authelia is the only login — which means it must never publish a port. Set `STORAGE_PATH` and mount the disk first — see [docs/storage.md](docs/storage.md) |
 | `nextcloud` | Nextcloud (+ Postgres, Redis) | `https://cloud.<domain>` | File sync over the same USB disk, attached as External Storage. **Not** behind Authelia — sync clients speak WebDAV and cannot follow an SSO redirect. Needs a mount-permission change first — see [docs/storage.md](docs/storage.md) |
 
 ## Adding a new service
