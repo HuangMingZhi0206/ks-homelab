@@ -35,7 +35,7 @@ sensor:
     unique_id: pi_cpu_temperature
     resource: http://prometheus:9090/api/v1/query
     params:
-      query: 'node_thermal_zone_temp{zone="0"}'
+      query: 'node_thermal_zone_temp{type="cpu-thermal"}'
     value_template: "{% set r = value_json.data.result %}{{ (r[0].value[1] | float | round(1)) if r | count > 0 }}"
     unit_of_measurement: "°C"
     device_class: temperature
