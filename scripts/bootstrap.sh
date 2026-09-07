@@ -86,6 +86,10 @@ gen_secret authelia_storage_encryption_key
 # must be readable by that user or Grafana dies with "Permission denied".
 # secrets/ is mode 700, so this is not exposed to other users on the host.
 gen_secret grafana_admin_password 644
+# Read by the Nextcloud and Postgres entrypoints, both of which start as root
+# before dropping privileges, so 600 is enough here.
+gen_secret nextcloud_db_password
+gen_secret nextcloud_admin_password
 
 # ------------------------------------------------------------------ traefik ACME storage
 mkdir -p traefik/acme

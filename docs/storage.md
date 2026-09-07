@@ -177,3 +177,81 @@ df -h /srv/hdd
 ```
 
 Harus menunjuk `/dev/sda1`, bukan `/dev/nvme0n1p2`.
+
+## Nextcloud di atas disk yang sama (profile `nextcloud`)
+
+Nextcloud memakai disk ini sebagai **External Storage**, bukan sebagai data
+directory-nya sendiri. Data directory dan database tetap di volume Docker (NVMe),
+karena Nextcloud melakukan chown dan file locking di sana — dua hal yang tidak
+bisa diungkapkan NTFS.
+
+```bash
+# di .env
+COMPOSE_PROFILES=...,nextcloud
+STORAGE_PATH=/srv/hdd
+```
+
+```bash
+docker compose up -d nextcloud
+```
+
+Sandi admin awal ada di `secrets/nextcloud_admin_password` (dibuat
+`bootstrap.sh`), user `admin`. Alamatnya `https://cloud.<domain>`.
+
+### Wajib: longgarkan permission mount
+
+Ini syaratnya, dan kalau dilewat gejalanya membingungkan — file terlihat di
+Nextcloud tapi setiap unggahan gagal.
+
+Mount di atas memakai `umask=022`, yang berarti berkas jadi `644` milik uid 1000.
+Nextcloud berjalan sebagai `www-data` (uid 33), jadi ia hanya kebagian bit
+"others": **bisa baca, tidak bisa tulis**. NTFS tidak punya permission per-berkas
+ala Unix — seluruh filesystem memakai satu pemilik dari opsi mount — sehingga
+tidak ada cara memberi izin ke uid 33 saja.
+
+Ganti `umask=022` di `/etc/fstab` menjadi:
+
+```
+fmask=0111,dmask=0000
+```
+
+Berkas jadi `666`, direktori `777`. Dengan begitu ketiga pemakainya bisa menulis:
+Samba (uid 1000), Filebrowser (root), dan Nextcloud (uid 33).
+
+```bash
+sudo systemctl daemon-reload && sudo mount -o remount /srv/hdd
+ls -ld /srv/hdd    # harus drwxrwxrwx
+```
+
+Konsekuensinya jujur: setiap pengguna lokal di Pi bisa menulis ke disk ini. Untuk
+NAS rumah satu pengguna itu wajar — disk ini toh sudah terbuka lewat Samba — tapi
+jangan tiru polanya di mesin dengan banyak akun.
+
+### Menambahkan disknya di Nextcloud
+
+1. Aktifkan aplikasi **External storage support** (Apps → Disabled).
+2. Administration settings → External storage → Add: tipe **Local**, folder
+   `/mnt/hdd`, beri nama misalnya "HDD".
+
+### File dari Samba tidak muncul? Jalankan scan
+
+Nextcloud menyimpan indeks berkas di database. Berkas yang masuk lewat Samba atau
+Filebrowser tidak lewat Nextcloud, jadi indeksnya tidak tahu. Ini sumber
+kebingungan paling sering — berkas jelas ada di disk, tapi tidak tampak di web.
+
+```bash
+docker compose exec -u www-data nextcloud php occ files:scan --all
+```
+
+Jadwalkan lewat cron di host, misalnya tiap 15 menit:
+
+```
+*/15 * * * * cd /path/ke/repo && docker compose exec -T -u www-data nextcloud php occ files:scan --all >/dev/null 2>&1
+```
+
+### Kenapa tanpa Authelia
+
+Router `nextcloud` sengaja tidak memakai `authelia@file`. Klien sync desktop dan
+aplikasi HP berbicara WebDAV, bukan sesi browser, jadi mereka tidak bisa
+mengikuti redirect SSO — alasan yang sama dengan ntfy. Yang menjaganya login
+Nextcloud sendiri; nyalakan 2FA di pengaturannya.
