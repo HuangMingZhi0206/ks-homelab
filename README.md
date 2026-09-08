@@ -133,7 +133,7 @@ Nine optional services ship disabled by default. Enable them by setting `COMPOSE
 | `snmp-exporter` | SNMP exporter | — | Scrapes a managed switch into Prometheus (per-port traffic, link state) — see [docs/monitoring-targets.md](docs/monitoring-targets.md) |
 | `filebrowser` | File Browser Quantum | `https://files.<domain>` | Web file manager for the USB disk on the host, with thumbnails and indexed search. Uses proxy auth so Authelia is the only login — which means it must never publish a port. Set `STORAGE_PATH` and mount the disk first — see [docs/storage.md](docs/storage.md) |
 | `nextcloud` | Nextcloud (+ Postgres, Redis) | `https://cloud.<domain>` | File sync over the same USB disk, attached as External Storage. **Not** behind Authelia — sync clients speak WebDAV and cannot follow an SSO redirect. Needs a mount-permission change first — see [docs/storage.md](docs/storage.md) |
-| `voice` | Home Assistant + Whisper + Piper + Ollama | `https://ha.<domain>` | Bilingual ID/EN voice assistant for time, temperature and free space. **Not** behind Authelia — the Companion app cannot follow an SSO redirect. Whisper/Piper/Ollama are pinned to CPU cores 2-3 so inference cannot starve DNS and monitoring — see [docs/voice-assistant.md](docs/voice-assistant.md) |
+| `voice` | Home Assistant + Whisper + Piper + Ollama | `https://ha.<domain>` | Bilingual ID/EN voice assistant for time, temperature and free space. **Not** behind Authelia — the Companion app cannot follow an SSO redirect. Whisper/Piper/Ollama run on all four cores at a lower `cpu_shares` weight, so inference runs flat out on an idle Pi and yields to DNS and monitoring under contention — see [docs/voice-assistant.md](docs/voice-assistant.md) |
 
 ## Adding a new service
 

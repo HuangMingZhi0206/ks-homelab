@@ -610,12 +610,20 @@ services:
   #
   # CPU is the scarce resource here, not RAM. This Pi also answers every DNS
   # query in the house and runs Authelia and Prometheus, and inference happily
-  # saturates all four cores. So Whisper, Piper and Ollama are pinned to cores
-  # 2-3, leaving 0-1 for the homelab stack. They can share those two cores
-  # because the pipeline is strictly sequential — speech to text, then the
-  # model, then text to speech; two of them are never busy at once.
+  # saturates all four cores.
   #
-  # Home Assistant itself is not pinned: it is latency-sensitive but cheap.
+  # The fix is priority, not partitioning. An earlier version pinned these to
+  # cores 2-3 with `cpuset`, which was wrong twice over: it capped them even
+  # when the Pi was idle (most of the time), and Ollama sizes its thread pool
+  # from the host CPU count rather than the cgroup, so it ran 4 threads on 2
+  # cores. Token generation synchronises the whole pool once per token, so that
+  # oversubscription was catastrophic — measured 11.5 tok/s reading the prompt
+  # against 0.46 tok/s writing the answer, on the same model in the same run.
+  #
+  # So: all four cores, but `cpu_shares` below the default 1024. The weight
+  # only matters under contention, so inference runs flat out on an idle Pi and
+  # yields the moment Traefik or AdGuard has work. Thread counts are set
+  # explicitly to match the cores actually available.
 
   homeassistant:
     image: homeassistant/home-assistant:stable
@@ -659,7 +667,7 @@ services:
     networks:
       - voice
     command: --model base --language auto --beam-size 1
-    cpuset: "2,3"
+    cpu_shares: 512
     mem_limit: 2g
     volumes:
       - whisper_data:/data
@@ -678,7 +686,7 @@ services:
     networks:
       - voice
     command: --voice id_ID-news_tts-medium
-    cpuset: "2,3"
+    cpu_shares: 512
     mem_limit: 1g
     volumes:
       - piper_data:/data
@@ -694,7 +702,7 @@ services:
       - voice
     networks:
       - voice
-    cpuset: "2,3"
+    cpu_shares: 512
     mem_limit: 3g
     environment:
       - TZ=${TZ}
@@ -706,13 +714,8 @@ services:
       - OLLAMA_MAX_LOADED_MODELS=1
       # Single user; more parallelism only multiplies the context memory.
       - OLLAMA_NUM_PARALLEL=1
-      # MUST match the core count in cpuset below. Ollama sizes its thread
-      # pool from the host's CPU count, not from the cgroup it runs in, so
-      # with cpuset "2,3" it would start 4 threads on 2 cores. Token
-      # generation synchronises every thread once per token, so that
-      # oversubscription is catastrophic there while batched prompt eval
-      # barely notices: measured 11.5 tok/s reading the prompt against
-      # 0.46 tok/s writing the answer. Change both or neither.
-      - OLLAMA_NUM_THREADS=2
+      # Must match the cores actually available. Ollama reads the host CPU
+      # count, not the cgroup, so this has to be stated rather than inferred.
+      - OLLAMA_NUM_THREADS=4
     volumes:
       - ollama_models:/root/.ollama

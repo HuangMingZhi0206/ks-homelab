@@ -23,7 +23,7 @@ kalimat: `home-assistant-intents` punya template per bahasa, dan koleksi Bahasa
 Indonesianya masih jauh lebih tipis daripada Inggris. Kalau kamu bicara
 Indonesia dan dia sering bingung — **itu** justifikasinya.
 
-## Mengapa CPU dipatok, bukan RAM
+## Prioritas, bukan pembagian core
 
 RAM bukan kendala di Pi 8 GB:
 
@@ -37,25 +37,43 @@ RAM bukan kendala di Pi 8 GB:
 | **Total** | **~5,7 GB dari 8 GB** |
 
 Yang jadi kendala **CPU**. Pi ini juga menjawab setiap kueri DNS di rumah dan
-menjalankan Authelia serta Prometheus, sementara inferensi dengan senang hati
-memakai keempat core sampai 100%. Tanpa pembatasan, setiap pertanyaan ke asisten
-akan terasa sebagai internet melambat di seluruh rumah, plus alert palsu di
-Grafana karena scrape timeout.
+menjalankan Authelia serta Prometheus, sementara inferensi memakai keempat core
+sampai 100%.
 
-Karena itu di `docker-compose.yml` ketiga komponen berat dipatok:
+Versi awal menangani ini dengan `cpuset: "2,3"` — memaku ketiga komponen ke dua
+core. **Itu salah dua kali**, dan terukur di Pi ini:
 
-```yaml
-    cpuset: "2,3"
+```
+prompt eval rate:  11.53 tokens/s     <- membaca pertanyaan
+eval rate:          0.46 tokens/s     <- menulis jawaban
 ```
 
-Core 0–1 tetap bebas untuk stack homelab. Ketiganya boleh berbagi core 2–3
-karena **pipeline-nya berurutan** — suara jadi teks, lalu model, lalu teks jadi
-suara; tidak pernah ada dua yang sibuk bersamaan. Home Assistant sendiri tidak
-dipatok: dia sensitif latensi tapi murah.
+Satu jawaban 29 token butuh **63 detik**.
 
-Konsekuensinya inferensi jadi sekitar setengah kecepatan. Untuk pertanyaan
-sependek "suhu berapa", selisih itu tidak terasa.
+Penyebabnya: **Ollama menentukan jumlah thread dari jumlah CPU host, bukan dari
+cgroup tempat dia berjalan.** Jadi dengan `cpuset` dua core, dia tetap
+menjalankan empat thread — empat thread berebut dua core. Generasi token
+menyinkronkan seluruh thread **setiap token**, jadi setiap sinkronisasi harus
+menunggu thread yang sedang tidak dijadwalkan. Prompt eval memproses banyak
+token dalam satu batch sehingga hampir tidak terpengaruh — itulah kenapa
+angkanya berbeda 25 kali pada model yang sama di proses yang sama.
 
+Kesalahan kedua: `cpuset` membatasi bahkan saat Pi sedang menganggur, yang justru
+kondisi mayoritas waktunya.
+
+**Yang dipakai sekarang: keempat core, tapi `cpu_shares: 512`** — di bawah
+default 1024. Bobot ini hanya berlaku saat ada rebutan, jadi inferensi berjalan
+penuh saat Pi sepi dan langsung mengalah begitu Traefik atau AdGuard punya
+pekerjaan. Jumlah thread diset eksplisit (`OLLAMA_NUM_THREADS=4`) supaya cocok
+dengan core yang benar-benar tersedia, bukan disimpulkan sendiri.
+
+Kalau suatu saat kamu mengubah salah satunya, ubah dua-duanya.
+
+### Pelajaran umumnya
+
+Untuk beban inferensi di mesin bersama, **turunkan prioritasnya, jangan potong
+core-nya** — dan kalau memang harus memotong, beri tahu aplikasinya berapa core
+yang dia dapat. Aplikasi yang membaca `nproc` tidak tahu apa-apa soal cgroup.
 ## Tahap 0: Home Assistant + Ollama saja, lewat teks
 
 Selama belum ada mic dan speaker, Whisper dan Piper tidak ada gunanya — jangan
@@ -111,7 +129,7 @@ biasanya menang — dan itu memang kesimpulan yang diharapkan.
 
 ### Ekspektasi kecepatan
 
-Dengan `cpuset: "2,3"` dan model 1,5 B di Pi 5, hitungan detik per jawaban,
+Dengan empat core dan model 1,5 B di Pi 5, hitungan beberapa detik per jawaban,
 bukan di bawah satu detik. Pertanyaan pertama setelah `pull` lebih lama karena
 model dimuat ke memori; sesudahnya tetap tinggal di sana karena
 `OLLAMA_KEEP_ALIVE=-1`.
