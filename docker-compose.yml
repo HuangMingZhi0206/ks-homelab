@@ -706,5 +706,13 @@ services:
       - OLLAMA_MAX_LOADED_MODELS=1
       # Single user; more parallelism only multiplies the context memory.
       - OLLAMA_NUM_PARALLEL=1
+      # MUST match the core count in cpuset below. Ollama sizes its thread
+      # pool from the host's CPU count, not from the cgroup it runs in, so
+      # with cpuset "2,3" it would start 4 threads on 2 cores. Token
+      # generation synchronises every thread once per token, so that
+      # oversubscription is catastrophic there while batched prompt eval
+      # barely notices: measured 11.5 tok/s reading the prompt against
+      # 0.46 tok/s writing the answer. Change both or neither.
+      - OLLAMA_NUM_THREADS=2
     volumes:
       - ollama_models:/root/.ollama
