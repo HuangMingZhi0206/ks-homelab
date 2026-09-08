@@ -69,6 +69,43 @@ dengan core yang benar-benar tersedia, bukan disimpulkan sendiri.
 
 Kalau suatu saat kamu mengubah salah satunya, ubah dua-duanya.
 
+### Hasil terukur, sebelum dan sesudah
+
+Model dan mesin yang sama, hanya konfigurasi CPU-nya yang berubah:
+
+| | `cpuset: "2,3"` (4 thread di 2 core) | 4 core, `cpu_shares: 512` |
+|---|---|---|
+| prompt eval | 11,53 t/s | **59,80 t/s** |
+| eval (generasi) | 0,46 t/s | **8,23 t/s** |
+| Jawaban 29 token | 63 detik | ~3,5 detik |
+
+**18 kali lebih cepat**, dari satu variabel saja. Suhu saat itu 52,9 °C, jadi
+bukan soal throttling.
+
+Pada permintaan kedua, `load duration` turun ke 877 µs dan `prompt eval cached`
+menunjukkan 24 token — bukti `OLLAMA_KEEP_ALIVE=-1` menahan model di memori dan
+prompt caching bekerja.
+
+### Kualitas model, bukan kecepatannya, yang jadi batas sebenarnya
+
+Pada kecepatan itu, `qwen2.5:1.5b` menjawab "sebutkan tiga warna" dengan:
+
+> "Batu banting dengan warna hijau, putih, dan biru."
+
+Warnanya benar, tapi ada frasa acak di depannya. Model 1,5 B memang segitu di
+Bahasa Indonesia. Konsekuensinya bukan soal enak dibaca: **kalau dia menyisipkan
+kata acak di pertanyaan sepele, dia juga bisa salah menyebut angka saat
+merangkum sensor** — dan tidak ada cara membedakannya dari jawaban yang benar.
+
+Karena itu pembagiannya tetap:
+
+- **Assist bawaan** untuk pertanyaan angka (suhu, sisa disk). Dijawab langsung
+  dari state sensor, tidak bisa dikarang.
+- **Ollama** untuk kalimat bebas yang intent-nya tidak dikenali.
+
+`qwen2.5:3b` (1,9 GB, ~4 t/s) lebih rapi berbahasa Indonesia dan masih muat di
+RAM yang tersisa, kalau kualitas lebih penting daripada kecepatan.
+
 ### Pelajaran umumnya
 
 Untuk beban inferensi di mesin bersama, **turunkan prioritasnya, jangan potong
