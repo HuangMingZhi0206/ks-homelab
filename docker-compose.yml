@@ -691,9 +691,12 @@ services:
     volumes:
       - piper_data:/data
 
-  # The model. qwen2.5:1.5b is ~1GB on disk and chosen for Indonesian fluency
-  # at a size that answers quickly on CPU. Pull it once after first start:
-  #   docker compose exec ollama ollama pull qwen2.5:1.5b
+  # The model. qwen2.5:3b, ~1.9GB on disk. The 1.5b variant runs at twice the
+  # speed but garbles Indonesian — it answered "sebutkan tiga warna" with a
+  # random phrase in front of the colours, and a model that inserts noise into
+  # a trivial answer can equally misstate a sensor reading. 3b answers cleanly
+  # and shrugged off a typo ("Siapa kmu"). Pull it once after first start:
+  #   docker compose exec ollama ollama pull qwen2.5:3b
   ollama:
     image: ollama/ollama:0.33.3
     container_name: ollama
@@ -703,7 +706,7 @@ services:
     networks:
       - voice
     cpu_shares: 512
-    mem_limit: 3g
+    mem_limit: 4g
     environment:
       - TZ=${TZ}
       # Keep the model resident instead of unloading after five minutes.

@@ -33,8 +33,8 @@ RAM bukan kendala di Pi 8 GB:
 | Home Assistant | ~600 MB |
 | Whisper `base` | ~1 GB |
 | Piper | ~300 MB |
-| Ollama + `qwen2.5:1.5b` | ~1,5 GB |
-| **Total** | **~5,7 GB dari 8 GB** |
+| Ollama + `qwen2.5:3b` | ~2,5 GB |
+| **Total** | **~6,7 GB dari 8 GB** |
 
 Yang jadi kendala **CPU**. Pi ini juga menjawab setiap kueri DNS di rumah dan
 menjalankan Authelia serta Prometheus, sementara inferensi memakai keempat core
@@ -103,8 +103,56 @@ Karena itu pembagiannya tetap:
   dari state sensor, tidak bisa dikarang.
 - **Ollama** untuk kalimat bebas yang intent-nya tidak dikenali.
 
-`qwen2.5:3b` (1,9 GB, ~4 t/s) lebih rapi berbahasa Indonesia dan masih muat di
-RAM yang tersisa, kalau kualitas lebih penting daripada kecepatan.
+Itu terkonfirmasi saat diuji, dan sebabnya `qwen2.5:3b` yang dipakai sekarang —
+lihat perbandingannya di bawah.
+
+### Model: 3b, bukan 1.5b
+
+Diuji berdampingan di Pi ini, pertanyaan yang sama:
+
+| | `qwen2.5:1.5b` | `qwen2.5:3b` |
+|---|---|---|
+| "Sebutkan tiga warna" | "**Batu banting** dengan warna hijau, putih, dan biru" | "Tiga warna adalah merah, hijau, dan biru" |
+| eval rate | 8,2 t/s | 4,1–4,7 t/s |
+| Jawaban pendek (16–22 token) | ~2,5 detik | 3,5–5,5 detik |
+| Salah ketik ("Siapa kmu") | — | tetap dipahami |
+
+1.5b dua kali lebih cepat tapi menyisipkan frasa acak. Selisih dua detik untuk
+jawaban yang benar itu murah, jadi **3b yang dipakai**. `mem_limit` dinaikkan ke
+4 GB untuk memberinya ruang.
+
+### Lamanya jawaban, bukan pilihan model, yang menentukan lamanya menunggu
+
+Ini tuas terbesar yang tersedia, dan sering terlewat. Pada ~4 t/s, waktu tunggu
+kira-kira **lamanya jawaban dibagi 4**. Terukur di sini:
+
+| Panjang jawaban | Waktu |
+|---|---|
+| 16 token | 3,4 detik |
+| 22 token | 5,4 detik |
+| 81 token | **19,8 detik** |
+
+Yang 81 token itu jawaban bertele-tele untuk "siapa kamu" — tiga kalimat berisi
+basa-basi. Isinya tidak lebih berguna daripada satu kalimat.
+
+Jadi **instruksi ringkas mengalahkan tuning CPU apa pun**. Di integrasi Ollama
+di Home Assistant, isi kolom prompt template dengan sesuatu seperti:
+
+```
+Jawab dalam satu kalimat, langsung ke inti, tanpa pembuka dan tanpa penutup.
+Kalau ditanya angka, sebutkan angkanya saja beserta satuannya.
+```
+
+Itu memotong 81 token jadi belasan — dari 20 detik ke sekitar 4 detik, tanpa
+mengubah model atau konfigurasi mesin sama sekali.
+
+### Satu artefak di angka yang bisa membingungkan
+
+Pada permintaan kedua yang prompt-nya sudah ter-cache, `prompt eval rate`
+terbaca **3,62 t/s** — seolah jauh lebih lambat. Itu bukan regresi: 36 dari 37
+token diambil dari cache, jadi yang benar-benar diproses hanya satu token, dan
+pembagiannya tetap memakai durasi total. Yang perlu dibaca adalah `prompt eval
+cached`, bukan rate-nya.
 
 ### Pelajaran umumnya
 
@@ -144,15 +192,15 @@ mengerjakan hal lain yang butuh bandwidth.
 
 ```bash
 docker compose up -d ollama
-docker compose exec ollama ollama pull qwen2.5:1.5b
-docker compose exec ollama ollama run qwen2.5:1.5b "Jawab singkat: apa itu NVMe?"
+docker compose exec ollama ollama pull qwen2.5:3b
+docker compose exec ollama ollama run qwen2.5:3b "Jawab singkat: apa itu NVMe?"
 ```
 
 Kalau jawabannya keluar, model sudah sehat. Lalu di Home Assistant:
 
 1. **Settings → Devices & Services → Add Integration → Ollama**
 2. URL: `http://ollama:11434`
-3. Model: `qwen2.5:1.5b`
+3. Model: `qwen2.5:3b`
 4. Di opsi integrasinya, aktifkan **Assist** dan izinkan mengontrol Home
    Assistant — tanpa itu model tidak punya akses ke sensor apa pun dan hanya
    akan mengarang.
@@ -207,8 +255,8 @@ beberapa menit dan pantau lognya.
 
 ```bash
 docker compose up -d ollama
-docker compose exec ollama ollama pull qwen2.5:1.5b     # ~1 GB
-docker compose exec ollama ollama run qwen2.5:1.5b "Halo, jawab singkat."
+docker compose exec ollama ollama pull qwen2.5:3b     # ~1,9 GB
+docker compose exec ollama ollama run qwen2.5:3b "Halo, jawab singkat."
 ```
 
 `OLLAMA_KEEP_ALIVE=-1` sudah diset supaya model tetap tinggal di memori. Tanpa
@@ -217,7 +265,7 @@ sesudah jeda harus memuat ~1 GB dari NVMe sebelum menjawab — jeda yang justru
 paling tidak boleh ada di asisten harian. Harganya ~1,5 GB tertahan permanen.
 
 Lalu di Home Assistant: **Settings → Devices & Services → Add Integration →
-Ollama**, URL `http://ollama:11434`, model `qwen2.5:1.5b`. Pasang sebagai
+Ollama**, URL `http://ollama:11434`, model `qwen2.5:3b`. Pasang sebagai
 conversation agent di pipeline Assist.
 
 ## Menyambungkan pipeline suara
