@@ -4,3 +4,21 @@ color: slate
 headerStyle: clean
 hideVersion: true
 statusStyle: dot
+
+# Two columns reads well on a phone in portrait; wider screens still fill out.
+layout:
+  Infrastructure:
+    style: row
+    columns: 2
+  Monitoring:
+    style: row
+    columns: 2
+  Storage:
+    style: row
+    columns: 2
+  Apps:
+    style: row
+    columns: 2
+  Auth & Notifications:
+    style: row
+    columns: 2

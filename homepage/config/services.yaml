@@ -1,6 +1,18 @@
 # {{HOMEPAGE_VAR_DOMAIN}} is injected from the DOMAIN env var (see docker-compose.yml)
+#
+# Entries that point at a bare IP are appliances that live outside this stack
+# and outside lab.<domain>: they have their own TLS (self-signed) and their own
+# login. Homepage only links to them.
 
 - Infrastructure:
+    - Proxmox:
+        icon: proxmox.svg
+        href: https://192.168.200.10:8006
+        description: Hypervisor — VMs & LXC
+    - OPNsense:
+        icon: opnsense.svg
+        href: https://192.168.10.1
+        description: Router, DHCP, DNS, firewall
     - Traefik:
         icon: traefik.svg
         href: https://traefik.{{HOMEPAGE_VAR_DOMAIN}}
@@ -23,6 +35,29 @@
         icon: prometheus.svg
         href: https://prometheus.{{HOMEPAGE_VAR_DOMAIN}}
         description: Metrics
+
+- Storage:
+    - File Browser:
+        icon: filebrowser.svg
+        href: https://files.{{HOMEPAGE_VAR_DOMAIN}}
+        description: USB disk on the Pi
+    - Nextcloud:
+        icon: nextcloud.svg
+        href: https://cloud.{{HOMEPAGE_VAR_DOMAIN}}
+        description: Files, calendar, contacts
+
+- Apps:
+    - Coolify:
+        icon: coolify.svg
+        href: https://coolify.syonin.site
+        description: Deploys the public sites
+    # Home Assistant is not deployed yet — planned for the Pi 4 on a USB SSD.
+    # Its own phone app is far better than a link: notifications, sensors,
+    # presence. Keep this entry as a shortcut, not as the way you use it.
+    #- Home Assistant:
+    #    icon: home-assistant.svg
+    #    href: http://192.168.10.x:8123
+    #    description: Home automation
 
 - Auth & Notifications:
     - Authelia:
