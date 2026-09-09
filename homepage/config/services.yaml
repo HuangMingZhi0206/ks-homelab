@@ -13,6 +13,10 @@
         icon: opnsense.svg
         href: https://192.168.10.1
         description: Router, DHCP, DNS, firewall
+    - TP-Link MR100:
+        icon: tp-link.svg
+        href: http://192.168.100.1
+        description: LTE modem — signal, SIM, reboot
     - Traefik:
         icon: traefik.svg
         href: https://traefik.{{HOMEPAGE_VAR_DOMAIN}}
