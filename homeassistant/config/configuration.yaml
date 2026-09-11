@@ -39,6 +39,7 @@ sensor:
     value_template: "{% set r = value_json.data.result %}{{ (r[0].value[1] | float | round(1)) if r | count > 0 }}"
     unit_of_measurement: "°C"
     device_class: temperature
+    state_class: measurement
     scan_interval: 60
 
   - platform: rest
@@ -49,6 +50,7 @@ sensor:
       query: '(1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100'
     value_template: "{% set r = value_json.data.result %}{{ (r[0].value[1] | float | round(0)) if r | count > 0 }}"
     unit_of_measurement: "%"
+    state_class: measurement
     scan_interval: 60
 
   - platform: rest
@@ -59,6 +61,8 @@ sensor:
       query: 'node_filesystem_avail_bytes{mountpoint="/",fstype!="tmpfs"}'
     value_template: "{% set r = value_json.data.result %}{{ ((r[0].value[1] | float / 1024**3) | round(1)) if r | count > 0 }}"
     unit_of_measurement: "GB"
+    device_class: data_size
+    state_class: measurement
     scan_interval: 300
 
   - platform: rest
@@ -69,6 +73,8 @@ sensor:
       query: 'node_filesystem_avail_bytes{mountpoint="/srv/hdd"}'
     value_template: "{% set r = value_json.data.result %}{{ ((r[0].value[1] | float / 1024**3) | round(1)) if r | count > 0 }}"
     unit_of_measurement: "GB"
+    device_class: data_size
+    state_class: measurement
     scan_interval: 300
 
   - platform: rest
@@ -78,4 +84,5 @@ sensor:
     params:
       query: 'node_load1'
     value_template: "{% set r = value_json.data.result %}{{ (r[0].value[1] | float | round(2)) if r | count > 0 }}"
+    state_class: measurement
     scan_interval: 60
