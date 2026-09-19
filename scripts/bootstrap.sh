@@ -151,6 +151,25 @@ else
   ok "authelia/users_database.yml already exists — keeping it"
 fi
 
+# ------------------------------------------------------------------ heartbeat
+# Everything else here runs in Docker, but this cannot: nothing on this host
+# is able to report that this host is gone. The heartbeat is a cron entry so
+# that it keeps its own schedule outside the stack it watches, and an outside
+# service notices when the pings stop.
+#
+# Only installed when HEALTHCHECKS_URL is set, so a machine that has not been
+# signed up for it is left alone.
+if [[ -n "${HEALTHCHECKS_URL:-}" ]]; then
+  if crontab -l 2>/dev/null | grep -qF "heartbeat.sh"; then
+    ok "heartbeat cron already installed"
+  else
+    ( crontab -l 2>/dev/null; echo "*/5 * * * * ${REPO_ROOT}/scripts/heartbeat.sh" ) | crontab -
+    ok "heartbeat cron installed (every 5 minutes)"
+  fi
+else
+  info "HEALTHCHECKS_URL unset -- no heartbeat, so nothing would report this host dying"
+fi
+
 # ------------------------------------------------------------------ launch
 info "Validating compose file"
 docker compose config -q
