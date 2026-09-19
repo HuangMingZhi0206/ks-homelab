@@ -25,64 +25,87 @@ http:
 # scrapes node-exporter on this host, so ask it instead. Home Assistant and
 # Prometheus both sit on the `proxy` network, which is why this name resolves.
 #
-# VERIFY THE METRIC NAMES against your own Prometheus before trusting these —
-# node_thermal_zone_temp in particular is ARM-specific and the zone label
-# varies. Open https://prometheus.<domain> and run the query by hand.
+# These use the `rest:` integration rather than `sensor: - platform: rest`,
+# specifically for `availability`. A Prometheus query that matches nothing
+# returns an empty result list, and without `availability` the value_template
+# has to render *something* — an empty string — which Home Assistant then
+# rejects outright:
+#
+#   Sensor ... has state class 'measurement' ... however, it has the
+#   non-numeric value: '' -- Error adding entity
+#
+# That kills the entity at startup, and it stays dead until the next restart.
+# `availability` is the supported way to say "no reading right now": the entity
+# goes `unavailable` and the value_template is not asked for a number.
+#
+# This matters here in normal operation, not just in theory: HDD Free has no
+# data whenever the USB disk is unplugged, and every sensor returns nothing for
+# the few seconds after a restart before Prometheus is reachable.
+#
+# VERIFY THE METRIC NAMES against your own Prometheus before trusting these.
+# Open https://prometheus.<domain> and run the query by hand.
 # ---------------------------------------------------------------------------
-sensor:
-  - platform: rest
-    name: Pi CPU Temperature
-    unique_id: pi_cpu_temperature
-    resource: http://prometheus:9090/api/v1/query
+rest:
+  - resource: http://prometheus:9090/api/v1/query
     params:
       query: 'node_thermal_zone_temp{type="cpu-thermal"}'
-    value_template: "{% set r = value_json.data.result %}{{ (r[0].value[1] | float | round(1)) if r | count > 0 }}"
-    unit_of_measurement: "°C"
-    device_class: temperature
-    state_class: measurement
     scan_interval: 60
+    sensor:
+      - name: Pi CPU Temperature
+        unique_id: pi_cpu_temperature
+        availability: "{{ value_json.data.result | count > 0 }}"
+        value_template: "{{ value_json.data.result[0].value[1] | float | round(1) }}"
+        unit_of_measurement: "°C"
+        device_class: temperature
+        state_class: measurement
 
-  - platform: rest
-    name: Pi Memory Used
-    unique_id: pi_memory_used
-    resource: http://prometheus:9090/api/v1/query
+  - resource: http://prometheus:9090/api/v1/query
     params:
       query: '(1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100'
-    value_template: "{% set r = value_json.data.result %}{{ (r[0].value[1] | float | round(0)) if r | count > 0 }}"
-    unit_of_measurement: "%"
-    state_class: measurement
     scan_interval: 60
+    sensor:
+      - name: Pi Memory Used
+        unique_id: pi_memory_used
+        availability: "{{ value_json.data.result | count > 0 }}"
+        value_template: "{{ value_json.data.result[0].value[1] | float | round(0) }}"
+        unit_of_measurement: "%"
+        state_class: measurement
 
-  - platform: rest
-    name: Pi NVMe Free
-    unique_id: pi_nvme_free
-    resource: http://prometheus:9090/api/v1/query
+  - resource: http://prometheus:9090/api/v1/query
     params:
       query: 'node_filesystem_avail_bytes{mountpoint="/",fstype!="tmpfs"}'
-    value_template: "{% set r = value_json.data.result %}{{ ((r[0].value[1] | float / 1024**3) | round(1)) if r | count > 0 }}"
-    unit_of_measurement: "GB"
-    device_class: data_size
-    state_class: measurement
     scan_interval: 300
+    sensor:
+      - name: Pi NVMe Free
+        unique_id: pi_nvme_free
+        availability: "{{ value_json.data.result | count > 0 }}"
+        value_template: "{{ (value_json.data.result[0].value[1] | float / 1024**3) | round(1) }}"
+        unit_of_measurement: "GB"
+        device_class: data_size
+        state_class: measurement
 
-  - platform: rest
-    name: HDD Free
-    unique_id: hdd_free
-    resource: http://prometheus:9090/api/v1/query
+  # Goes unavailable whenever the USB disk is unplugged. That is correct, and
+  # it is the case that exposed the bug above.
+  - resource: http://prometheus:9090/api/v1/query
     params:
       query: 'node_filesystem_avail_bytes{mountpoint="/srv/hdd"}'
-    value_template: "{% set r = value_json.data.result %}{{ ((r[0].value[1] | float / 1024**3) | round(1)) if r | count > 0 }}"
-    unit_of_measurement: "GB"
-    device_class: data_size
-    state_class: measurement
     scan_interval: 300
+    sensor:
+      - name: HDD Free
+        unique_id: hdd_free
+        availability: "{{ value_json.data.result | count > 0 }}"
+        value_template: "{{ (value_json.data.result[0].value[1] | float / 1024**3) | round(1) }}"
+        unit_of_measurement: "GB"
+        device_class: data_size
+        state_class: measurement
 
-  - platform: rest
-    name: Pi Load
-    unique_id: pi_load
-    resource: http://prometheus:9090/api/v1/query
+  - resource: http://prometheus:9090/api/v1/query
     params:
       query: 'node_load1'
-    value_template: "{% set r = value_json.data.result %}{{ (r[0].value[1] | float | round(2)) if r | count > 0 }}"
-    state_class: measurement
     scan_interval: 60
+    sensor:
+      - name: Pi Load
+        unique_id: pi_load
+        availability: "{{ value_json.data.result | count > 0 }}"
+        value_template: "{{ value_json.data.result[0].value[1] | float | round(2) }}"
+        state_class: measurement
