@@ -1,0 +1,38 @@
+apiVersion: 1
+
+# RENDERED BY scripts/bootstrap.sh — edit this .tmpl, never contact-points.yaml.
+# The rendered file is gitignored because it carries the bot token.
+#
+# Why a template instead of Grafana's own $VAR substitution: Grafana replaces
+# variables in the raw text before parsing, so an all-digit chat id lands as a
+# YAML number, and the Telegram receiver requires a string. Quoting does not
+# help. Grafana then fails the *entire* alerting provisioner, taking the alert
+# rules with it, and the only sign is one line in the log:
+#
+#   cannot unmarshal number into Go struct field Config.chatid of type string
+#   Stopped background service ... ProvisioningServiceImpl
+#
+# bottoken survives $VAR substitution because a token contains letters and a
+# colon, so it stays a string. That asymmetry is exactly the trap.
+#
+# Telegram, not ntfy: Grafana calls api.telegram.org outbound, so alerts leave
+# a CGNAT'd house without anything being exposed. ntfy here is internal-only
+# and would only reach you at home — the one place you do not need telling.
+#
+# To get the values: message @BotFather, /newbot, copy the token. Then send
+# your new bot a message and read the chat id from
+#   https://api.telegram.org/bot<TOKEN>/getUpdates
+contactPoints:
+  - orgId: 1
+    name: homelab
+    receivers:
+      - uid: homelab-telegram
+        type: telegram
+        disableResolveMessage: false
+        settings:
+          bottoken: "__TELEGRAM_BOT_TOKEN__"
+          chatid: "__TELEGRAM_CHAT_ID__"
+          message: |
+            {{ range .Alerts }}{{ if eq .Status "firing" }}🔴 FIRING{{ else }}✅ RESOLVED{{ end }} — {{ .Labels.alertname }}
+            {{ .Annotations.summary }}
+            {{ end }}

@@ -217,12 +217,9 @@ services:
       - GF_USERS_ALLOW_SIGN_UP=false
       - GF_ANALYTICS_REPORTING_ENABLED=false
       - GF_ANALYTICS_CHECK_FOR_UPDATES=false
-      # Read by the provisioned contact point in
-      # monitoring/grafana/provisioning/alerting/. Grafana reaches
-      # api.telegram.org outbound over the proxy network, so alerts leave the
-      # house without anything being exposed to it.
-      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
-      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID:-}
+      # No TELEGRAM_* here on purpose: Grafana's own $VAR substitution mangles
+      # a numeric chat id, so bootstrap.sh bakes the values into the contact
+      # point instead. See monitoring/grafana/provisioning/alerting/.
       # Read-only access without a Grafana login, for the wall-display kiosk.
       # Only reachable by hosts Authelia bypasses (see KIOSK_IP); everyone else
       # still hits the SSO portal first, and editing still requires logging in.

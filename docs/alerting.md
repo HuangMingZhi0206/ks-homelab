@@ -31,25 +31,43 @@ gateway — aturan alert-nya tidak perlu diubah.
 ## Menyiapkan (sekali, ~5 menit)
 
 1. Di Telegram, kirim pesan ke **@BotFather** → `/newbot` → salin tokennya.
-2. Kirim satu pesan apa saja ke bot barumu.
-3. Buka `https://api.telegram.org/bot<TOKEN>/getUpdates` dan ambil
-   `message.chat.id` dari JSON-nya.
-4. Isi di `.env`:
+2. Kirim satu pesan apa saja ke bot barumu (bukan ke BotFather — itu cuma pabriknya).
+3. Ambil chat id-nya. Cara tercepat: chat **@userinfobot**, dia membalas dengan `Id:`. Atau buka `https://api.telegram.org/bot<TOKEN>/getUpdates` dan cari `chat.id` — kosong berarti langkah 2 belum dilakukan.
+4. Isi keduanya di `.env`, lalu jalankan `./scripts/bootstrap.sh` (atau render manual, lihat di bawah) dan `docker compose up -d grafana`.
 
-```bash
-TELEGRAM_BOT_TOKEN=123456:ABC...
-TELEGRAM_CHAT_ID=987654321
+### Kenapa di-render, bukan dibaca Grafana langsung
+
+Grafana mengganti `$VAR` di dalam file provisioning **sebagai teks mentah,
+sebelum YAML-nya diurai**. Chat id yang seluruhnya angka jadi tertulis sebagai
+*number*, sementara receiver Telegram menuntut *string* — dan memberi kutip di
+YAML tidak menolong, karena penggantinya terjadi lebih dulu.
+
+Yang bikin jebakan ini sulit terlihat: **bottoken selamat**, karena token
+mengandung huruf dan titik dua sehingga tetap string. Jadi separuh konfigurasi
+tampak benar.
+
+Dan kegagalannya tidak berhenti di receiver itu. Grafana membatalkan **seluruh
+provisioner alerting**, jadi kelima aturan alert ikut tidak termuat. Satu-
+satunya tanda ada di log:
+
+```
+cannot unmarshal number into Go struct field Config.chatid of type string
+Stopped background service ... ProvisioningServiceImpl
 ```
 
+Karena itu [`contact-points.yaml.tmpl`](../monitoring/grafana/provisioning/alerting/contact-points.yaml.tmpl)
+di-render oleh `bootstrap.sh` — pola yang sama dengan `traefik.yml.tmpl`. Hasil
+render-nya gitignored karena memuat token.
+
+Render ulang tanpa menjalankan bootstrap penuh:
+
 ```bash
-docker compose up -d grafana
+set -a; . ./.env; set +a
+T=monitoring/grafana/provisioning/alerting/contact-points.yaml.tmpl
+sed -e "s|__TELEGRAM_BOT_TOKEN__|$TELEGRAM_BOT_TOKEN|" \
+    -e "s|__TELEGRAM_CHAT_ID__|$TELEGRAM_CHAT_ID|" "$T" > "${T%.tmpl}"
+docker compose up -d --force-recreate grafana
 ```
-
-`up -d`, bukan `restart` — environment berubah, jadi container harus dibuat
-ulang.
-
-Uji tanpa menunggu ada yang rusak: **Alerting → Contact points → homelab →
-Test**.
 
 ## Aturannya
 

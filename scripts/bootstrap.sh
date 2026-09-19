@@ -65,6 +65,21 @@ source .env
 sed "s|__ACME_EMAIL__|${ACME_EMAIL}|" traefik/traefik.yml.tmpl > traefik/traefik.yml
 ok "traefik/traefik.yml rendered from template"
 
+# Grafana substitutes $VAR into provisioning files as raw text, so an all-digit
+# Telegram chat id becomes a YAML number and the Telegram receiver -- which
+# wants a string -- is rejected. Grafana then aborts the whole alerting
+# provisioner, so the alert rules silently never load either. Render it here
+# instead, and keep the bot token out of the repo while we are at it.
+ALERT_TMPL="monitoring/grafana/provisioning/alerting/contact-points.yaml.tmpl"
+if [[ -f "$ALERT_TMPL" ]]; then
+  sed -e "s|__TELEGRAM_BOT_TOKEN__|${TELEGRAM_BOT_TOKEN:-}|" -e "s|__TELEGRAM_CHAT_ID__|${TELEGRAM_CHAT_ID:-}|" "$ALERT_TMPL" > "${ALERT_TMPL%.tmpl}"
+  if [[ -n "${TELEGRAM_BOT_TOKEN:-}" && -n "${TELEGRAM_CHAT_ID:-}" ]]; then
+    ok "Grafana Telegram contact point rendered"
+  else
+    info "Grafana contact point rendered, but TELEGRAM_* are unset in .env -- alerts will evaluate and not notify"
+  fi
+fi
+
 
 # ------------------------------------------------------------------ secrets
 info "Generating secrets (skipping any that already exist)"
