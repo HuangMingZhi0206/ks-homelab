@@ -622,8 +622,13 @@ services:
   #
   # So: all four cores, but `cpu_shares` below the default 1024. The weight
   # only matters under contention, so inference runs flat out on an idle Pi and
-  # yields the moment Traefik or AdGuard has work. Thread counts are set
-  # explicitly to match the cores actually available.
+  # yields the moment Traefik or AdGuard has work.
+  #
+  # An earlier version also set OLLAMA_NUM_THREADS, on the theory that Ollama
+  # had to be told its core count. It does not recognise that variable — the
+  # server logs every setting it knows on startup and that one never appears,
+  # while OLLAMA_NUM_PARALLEL and OLLAMA_KEEP_ALIVE do. Removing the cpuset is
+  # what fixed the 18x slowdown; the variable did nothing.
 
   homeassistant:
     image: homeassistant/home-assistant:stable
@@ -717,8 +722,5 @@ services:
       - OLLAMA_MAX_LOADED_MODELS=1
       # Single user; more parallelism only multiplies the context memory.
       - OLLAMA_NUM_PARALLEL=1
-      # Must match the cores actually available. Ollama reads the host CPU
-      # count, not the cgroup, so this has to be stated rather than inferred.
-      - OLLAMA_NUM_THREADS=4
     volumes:
       - ollama_models:/root/.ollama
