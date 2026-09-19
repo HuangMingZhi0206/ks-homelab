@@ -79,21 +79,58 @@ Dua aturan yang lahir dari kejadian nyata:
 `repeat_interval` 4 jam: cukup sering untuk tidak terlupakan, cukup jarang
 untuk tidak jadi kebisingan.
 
-## Yang TIDAK tertangkap: Pi-nya sendiri mati
+## Menutup lubang terakhir: heartbeat ke luar
 
 **Grafana jalan di Pi.** Kalau Pi mati, Grafana ikut mati, dan tidak ada alert
-yang terkirim. Prometheus, ntfy, dan Home Assistant juga semuanya di sana.
+yang terkirim. Prometheus dan ntfy juga di sana. Sistem alert di atas menangkap
+Dell mati, switch mati, disk penuh, suhu naik — tapi **tidak bisa memberi tahu
+bahwa dirinya sendiri hilang**.
 
-Jadi sistem ini menangkap **Dell/Proxmox mati, switch mati, disk penuh, suhu
-naik** — tapi tidak bisa memberi tahu bahwa dirinya sendiri hilang.
+Penutupnya harus dari luar rumah. [`scripts/heartbeat.sh`](../scripts/heartbeat.sh)
+mengirim ping ke healthchecks.io tiap 5 menit; kalau ping berhenti, **mereka**
+yang mengirim email ke kamu. Gratis, nol container.
 
-Untuk itu perlu sesuatu **di luar rumah**. Yang paling murah: **healthchecks.io**
-(gratis). Cron di Pi mengirim ping tiap 5 menit; kalau ping berhenti, layanan
-itu yang mengirim email ke kamu.
+### Bukan sekadar ping "masih hidup"
+
+Pi yang menyala tapi Traefik-nya mati bukan sehat. Jadi script ini memeriksa
+container inti — `traefik`, `authelia`, `redis`, `prometheus`, `grafana` — dan
+kalau ada yang tidak `running`, dia melapor ke endpoint `/fail`, bukan diam
+mengirim ping ceria.
+
+Service berprofile sengaja tidak diperiksa: sifatnya memang opsional, jadi
+mengalertkannya akan berbunyi di mesin yang cuma mematikannya.
+
+Badan ping-nya juga membawa **jumlah undervoltage boot ini**, sehingga riwayat
+di healthchecks.io menjadi catatan kesehatan catu daya dari waktu ke waktu —
+yang di Pi ini sedang jadi masalah aktif (lihat [storage.md](storage.md)).
+
+### Memasang
+
+1. Daftar di healthchecks.io, buat satu check, salin **ping URL**-nya.
+2. Di `.env` pada Pi:
 
 ```bash
-*/5 * * * * curl -fsS -m 10 --retry 3 https://hc-ping.com/<uuid> >/dev/null
+HEALTHCHECKS_URL=https://hc-ping.com/<uuid>
 ```
 
-Nol container, nol biaya, dan menutup satu-satunya lubang yang tidak bisa
-ditutup dari dalam.
+3. Pasang cron-nya:
+
+```bash
+crontab -e
+```
+
+```
+*/5 * * * * /opt/homelab/scripts/heartbeat.sh
+```
+
+4. Setel **Period 5 menit, Grace 10 menit** di healthchecks.io, supaya satu
+   ping yang terlewat karena jaringan tidak langsung memicu alarm.
+
+Uji sekali secara manual:
+
+```bash
+/opt/homelab/scripts/heartbeat.sh && echo terkirim
+```
+
+Tanpa `HEALTHCHECKS_URL` script-nya keluar diam-diam, jadi entri cron itu aman
+walau belum dikonfigurasi.

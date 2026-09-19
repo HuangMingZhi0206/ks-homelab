@@ -23,7 +23,8 @@ Production-ready Docker Compose homelab: **Traefik v3** (reverse proxy + automat
 ├── scripts/
 │   ├── bootstrap.sh              # One-shot setup: secrets, users, launch
 │   ├── backup.sh                 # Volume + config backup (restic or local tar)
-│   └── add-service.sh            # Generates a compose block for a new service
+│   ├── add-service.sh            # Generates a compose block for a new service
+│   └── heartbeat.sh              # Outside-in health ping (healthchecks.io)
 ├── docs/
 │   ├── adding-services.md        # How to put a new app behind Traefik + SSO
 │   ├── kiosk-display.md          # Grafana on the Proxmox host's own screen
@@ -126,7 +127,7 @@ Five alert rules and a Telegram contact point are provisioned from `monitoring/g
 
 Grafana rather than Alertmanager because Alertmanager needs a bridge container to reach ntfy, and this Pi has no power budget to spare. Telegram rather than ntfy because ntfy here is internal-only, so it would only reach you at home — the one place you do not need telling.
 
-**It cannot tell you the Pi itself died**, because Grafana runs on the Pi. That gap needs an external dead-man's-switch such as healthchecks.io — see [docs/alerting.md](docs/alerting.md).
+**It cannot tell you the Pi itself died**, because Grafana runs on the Pi. [`scripts/heartbeat.sh`](scripts/heartbeat.sh) closes that gap from outside: cron pings healthchecks.io every five minutes, and they email you when the pings stop. It checks the core containers too, so a Pi that is up with Traefik dead reports a failure rather than a cheerful ping — see [docs/alerting.md](docs/alerting.md).
 
 ## Optional services (Compose profiles)
 
