@@ -15,7 +15,7 @@ Production-ready Docker Compose homelab: **Traefik v3** (reverse proxy + automat
 ├── monitoring/
 │   ├── prometheus/prometheus.yml # Scrape targets
 │   └── grafana/
-│       ├── provisioning/         # Auto-provisioned datasource + dashboard loader
+│       ├── provisioning/         # Datasource, dashboards, and alert rules
 │       └── dashboards/           # Dashboard JSON (Homelab Overview included)
 ├── homepage/config/              # Homepage dashboard config (optional service)
 ├── filebrowser/config.yaml       # File Browser Quantum config (optional service)
@@ -29,6 +29,7 @@ Production-ready Docker Compose homelab: **Traefik v3** (reverse proxy + automat
 │   ├── kiosk-display.md          # Grafana on the Proxmox host's own screen
 │   ├── monitoring-targets.md     # Proxmox API token + switch SNMP for Prometheus
 │   ├── coolify-deployments.md    # Shipping web apps through Coolify + GHCR
+│   ├── alerting.md               # Grafana alert rules -> Telegram
 │   ├── storage.md                # USB HDD on the Pi, shared over Samba
 │   └── voice-assistant.md        # Local voice assistant on the Pi 5
 ├── .github/workflows/lint.yml    # CI: compose validate, yamllint, shellcheck
@@ -118,6 +119,14 @@ Grafana has its own login on top of Authelia: user `admin`, password in `secrets
 Traefik terminates TLS and, for any router carrying the `authelia@file` middleware, forwards the request to Authelia (`/api/authz/forward-auth`) before proxying. No valid session → redirect to the portal. Sessions live in Redis; user accounts live in `authelia/users_database.yml`.
 
 The default policy in [authelia/configuration.yml](authelia/configuration.yml) is `one_factor` for `*.<domain>`. After logging in once, enroll a TOTP device in the portal and switch the rule to `two_factor`. Password-reset links are written to the `notification.txt` file in the Authelia data volume (filesystem notifier) — switch to the `smtp` notifier when you have a mail relay.
+
+## Alerting
+
+Five alert rules and a Telegram contact point are provisioned from `monitoring/grafana/provisioning/alerting/` — no clicking, and they live in git like everything else. Set `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` in `.env` and run `docker compose up -d grafana`.
+
+Grafana rather than Alertmanager because Alertmanager needs a bridge container to reach ntfy, and this Pi has no power budget to spare. Telegram rather than ntfy because ntfy here is internal-only, so it would only reach you at home — the one place you do not need telling.
+
+**It cannot tell you the Pi itself died**, because Grafana runs on the Pi. That gap needs an external dead-man's-switch such as healthchecks.io — see [docs/alerting.md](docs/alerting.md).
 
 ## Optional services (Compose profiles)
 

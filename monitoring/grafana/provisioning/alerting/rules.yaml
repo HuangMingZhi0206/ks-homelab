@@ -1,0 +1,158 @@
+apiVersion: 1
+
+# Five rules, deliberately few. Every alert you ignore trains you to ignore the
+# next one, so nothing here fires on a metric that moves normally — no CPU
+# percentage, no load average, no RAM used (high RAM used is healthy on Linux;
+# the kernel caches with it).
+#
+# Each rule is the same shape: A is an instant Prometheus query, B is a
+# threshold on A, and B is the condition.
+
+groups:
+  - orgId: 1
+    name: homelab
+    folder: Alerts
+    interval: 1m
+    rules:
+      # The one that would have caught three days of Dell downtime.
+      - uid: homelab-instance-down
+        title: Instance down
+        condition: B
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: '{{ $labels.job }} ({{ $labels.instance }}) has not answered a scrape for 5 minutes.'
+        noDataState: NoData
+        execErrState: Error
+        data:
+          - refId: A
+            relativeTimeRange: {from: 300, to: 0}
+            datasourceUid: prometheus
+            model:
+              refId: A
+              instant: true
+              expr: up
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: {type: lt, params: [1]}
+
+      # Catches an unclean restart. Six of these fired the night the Pi's power
+      # supply turned out to be failing; without it the only symptom was "the
+      # assistant never answers".
+      - uid: homelab-host-rebooted
+        title: Host rebooted
+        condition: B
+        for: 0s
+        labels:
+          severity: warning
+        annotations:
+          summary: '{{ $labels.instance }} booted less than 10 minutes ago. If this repeats, suspect power — see docs/storage.md.'
+        noDataState: OK
+        execErrState: OK
+        data:
+          - refId: A
+            relativeTimeRange: {from: 600, to: 0}
+            datasourceUid: prometheus
+            model:
+              refId: A
+              instant: true
+              expr: time() - node_boot_time_seconds
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: {type: lt, params: [600]}
+
+      - uid: homelab-disk-low
+        title: Disk space low
+        condition: B
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: '{{ $labels.mountpoint }} on {{ $labels.instance }} is below 10% free.'
+        noDataState: OK
+        execErrState: Error
+        data:
+          - refId: A
+            relativeTimeRange: {from: 900, to: 0}
+            datasourceUid: prometheus
+            model:
+              refId: A
+              instant: true
+              expr: 100 * node_filesystem_avail_bytes{fstype!~"tmpfs|overlay|squashfs"} / node_filesystem_size_bytes{fstype!~"tmpfs|overlay|squashfs"}
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: {type: lt, params: [10]}
+
+      # MemAvailable, not "used". Used includes reclaimable cache and sits high
+      # on a healthy machine; available is what actually runs out. There is no
+      # swap on this Pi, so running out means the OOM killer, not slowdown.
+      - uid: homelab-memory-low
+        title: Memory nearly exhausted
+        condition: B
+        for: 15m
+        labels:
+          severity: critical
+        annotations:
+          summary: '{{ $labels.instance }} has under 10% memory available. No swap here, so this ends in an OOM kill.'
+        noDataState: OK
+        execErrState: Error
+        data:
+          - refId: A
+            relativeTimeRange: {from: 900, to: 0}
+            datasourceUid: prometheus
+            model:
+              refId: A
+              instant: true
+              expr: 100 * node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: {type: lt, params: [10]}
+
+      # The Pi throttles around 80-85 C.
+      - uid: homelab-cpu-hot
+        title: CPU temperature high
+        condition: B
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: '{{ $labels.instance }} has been above 80 C for 10 minutes; it will be throttling.'
+        noDataState: OK
+        execErrState: OK
+        data:
+          - refId: A
+            relativeTimeRange: {from: 600, to: 0}
+            datasourceUid: prometheus
+            model:
+              refId: A
+              instant: true
+              expr: node_thermal_zone_temp{type="cpu-thermal"}
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: {type: gt, params: [80]}

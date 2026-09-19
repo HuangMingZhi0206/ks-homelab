@@ -1,0 +1,30 @@
+apiVersion: 1
+
+# Telegram, because it is the only channel here that reaches the phone from
+# behind CGNAT without exposing anything: Grafana makes an outbound HTTPS call
+# to api.telegram.org, and Telegram handles delivery. No port, no tunnel, no
+# DNS record.
+#
+# ntfy was the obvious alternative and was rejected: ntfy.lab.<domain> is
+# internal-only by design, so it only arrives at home or over Tailscale —
+# exactly not the case an alert is for. It can be added back as a second
+# receiver under this contact point if you want a local copy too.
+#
+# To fill these in: message @BotFather on Telegram, /newbot, copy the token.
+# Then message your new bot once and open
+#   https://api.telegram.org/bot<TOKEN>/getUpdates
+# to read the chat id out of the response.
+contactPoints:
+  - orgId: 1
+    name: homelab
+    receivers:
+      - uid: homelab-telegram
+        type: telegram
+        disableResolveMessage: false
+        settings:
+          bottoken: $TELEGRAM_BOT_TOKEN
+          chatid: $TELEGRAM_CHAT_ID
+          message: |
+            {{ range .Alerts }}{{ if eq .Status "firing" }}🔴 FIRING{{ else }}✅ RESOLVED{{ end }} — {{ .Labels.alertname }}
+            {{ .Annotations.summary }}
+            {{ end }}
