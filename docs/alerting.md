@@ -69,6 +69,37 @@ sed -e "s|__TELEGRAM_BOT_TOKEN__|$TELEGRAM_BOT_TOKEN|" \
 docker compose up -d --force-recreate grafana
 ```
 
+### Mengujinya
+
+Contact point dari provisioning **read-only di UI** — ada ikon gembok, dan
+tombol Test berada di dalam form edit yang terkunci. Jadi cara mengujinya
+bukan lewat tombol itu.
+
+Picu alert sungguhan. Hentikan `cadvisor`: dia hanya menyediakan metrik
+per-container dan tidak ada yang bergantung padanya, jadi ini aman.
+
+```bash
+docker compose stop cadvisor
+```
+
+Tunggu sekitar 6 menit — `for: 5m` ditambah `group_wait: 30s` — dan Telegram
+akan menerima:
+
+```
+🔴 FIRING — Instance down
+cadvisor (cadvisor:8080) has not answered a scrape for 5 minutes.
+```
+
+```bash
+docker compose start cadvisor
+```
+
+Beberapa menit kemudian harus menyusul **✅ RESOLVED**. Itu bagian yang sering
+terlewat diuji: sistem alert yang bisa berteriak tapi tidak pernah bilang
+sudah beres justru melatihmu mengabaikannya.
+
+Terverifikasi utuh dengan cara ini pada 2026-09-19.
+
 ## Aturannya
 
 Lima saja, dan itu disengaja. Setiap alert yang kamu abaikan melatihmu
