@@ -1,0 +1,2 @@
+# Grafana logs an error for every provisioning subdirectory it cannot open.
+# This one stays empty on purpose; the file only keeps the directory in git.

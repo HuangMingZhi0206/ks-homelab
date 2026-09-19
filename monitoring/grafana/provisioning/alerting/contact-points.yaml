@@ -23,7 +23,12 @@ contactPoints:
         disableResolveMessage: false
         settings:
           bottoken: $TELEGRAM_BOT_TOKEN
-          chatid: $TELEGRAM_CHAT_ID
+          # Quoted: Grafana substitutes the variable into the raw text before
+          # parsing, so an unquoted numeric id arrives as a YAML number and is
+          # rejected with "cannot unmarshal number into Go struct field
+          # Config.chatid of type string" — which aborts the whole alerting
+          # provisioner, rules included.
+          chatid: "$TELEGRAM_CHAT_ID"
           message: |
             {{ range .Alerts }}{{ if eq .Status "firing" }}🔴 FIRING{{ else }}✅ RESOLVED{{ end }} — {{ .Labels.alertname }}
             {{ .Annotations.summary }}
