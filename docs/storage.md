@@ -33,22 +33,70 @@ Membaca nilainya:
 for f in /proc/device-tree/chosen/power/*; do echo -n "$(basename $f) = "; od -An -tu4 --endian=big "$f" 2>/dev/null || echo "?"; done
 ```
 
-**Pemecahannya di sini:** `usb_max_current_enable=1` ditambahkan ke
-`/boot/firmware/config.txt`. Sesudah reboot, HDD langsung terbaca dan tidak ada
-satu pun pesan undervoltage — jadi step-down-nya memang mampu, hanya firmware
-yang menahan.
+**Yang dicoba:** `usb_max_current_enable=1` ditambahkan ke
+`/boot/firmware/config.txt`. Sesudah reboot HDD langsung terbaca, dan saat itu
+tidak ada pesan undervoltage — sehingga disimpulkan step-down-nya memang mampu
+dan hanya firmware yang menahan.
 
-Konsekuensinya harus disadari: **pengaman itu sekarang mati.** Kalau catu daya
-melemah seiring umur, tidak ada lagi yang memutus, dan brownout saat NVMe
-menulis bisa merusak sistem. Periksa sesudah penyalinan besar:
+## Kesimpulan itu salah (terbukti 2026-09-19)
+
+Yang sebenarnya terjadi: mematikan pengaman tidak membuat dayanya cukup, hanya
+menghapus yang menolak.
+
+Malam itu Pi reboot **enam kali dalam satu jam** dan menjadi tidak bisa di-SSH.
+Buktinya:
+
+| | |
+|---|---|
+| Undervoltage | **31 kejadian** dalam 6 boot |
+| Perangkat USB terpasang | **tidak ada sama sekali** |
+| Beban saat masih drop | idle, 1 menit sesudah boot, load < 1 |
+
+Poin terakhir yang menentukan. HDD sudah dicopot, tidak ada satu pun perangkat
+USB, jadi yang ditanggung catu daya cuma board Pi 5 dan NVMe. Kalau dengan
+beban seminimal itu tegangannya tetap drop, masalahnya bukan pada yang dicolok
+melainkan **pada catu dayanya sendiri**.
+
+Gejala lain yang ternyata berasal dari sumber yang sama:
+
+- Pi hilang-timbul dari Tailscale
+- Jam basi di setiap boot — restart tidak bersih, `fake-hwclock` memulihkan
+  waktu lama sampai NTP menyusul. Sempat membuat log container tertulis Juli.
+- Permintaan ke Ollama lewat Assist tidak pernah selesai — Pi-nya reboot di
+  tengah jalan
+
+### Perbaikannya: ganti catu dayanya
+
+Pi 5 butuh **5,1 V / 5 A USB-C PD** — adaptor resmi Raspberry Pi 27 W. Step-down
+12 V→5 V tidak sanggup menahan tegangan di bawah beban, dan karena tidak ada
+negosiasi PD, firmware tidak pernah tahu batas sebenarnya (itu juga sebab
+`usb_max_current_enable` diperlukan sejak awal).
+
+Menambah USB hub berdaya **tidak** menyelesaikan ini. Hub menolong disknya, tapi
+board-nya sendiri yang kekurangan.
+
+### Kenapa ini mendesak, bukan sekadar mengganggu
+
+Stack ini boot dari NVMe. **Brownout berulang saat disk sedang menulis adalah
+cara klasik merusak filesystem** — dan kalau NVMe-nya korup, seluruh stack
+hilang sekaligus, bukan satu layanan.
+
+Sampai catu dayanya diganti, hindari beban puncak. Inferensi LLM (profile
+`voice`) adalah penarik daya terbesar di mesin ini dan paling mungkin memicu
+brownout:
 
 ```bash
-sudo dmesg | grep -ic undervolt
+docker compose stop ollama
 ```
 
-Angka selain 0 berarti catu dayanya sudah tidak sanggup lagi. Saat itu tiba,
-gantinya bukan menyetel ulang firmware melainkan memberi disk dayanya sendiri —
-USB hub berdaya atau docking station, yang keduanya punya PSU sendiri.
+### Memantau
+
+```bash
+journalctl -k -b 0 | grep -ci undervolt
+```
+
+Nol berarti sehat. Angka berapa pun selain nol berarti catu dayanya sedang
+tidak sanggup — dan sesudah PSU diganti, angka ini yang membuktikannya beres.
 
 ## Memasang disk
 

@@ -335,20 +335,36 @@ menyimpulkan datang dari proxy tak tepercaya, dan menjawab **setiap** request
 dengan `400: Bad Request` — termasuk layar onboarding. Jadi kamu tidak akan
 pernah bisa masuk untuk memperbaikinya dari UI.
 
-## Pantau undervoltage
+## Ollama dihentikan: catu daya Pi tidak sanggup (2026-09-19)
 
-`usb_max_current_enable=1` di Pi ini sudah mematikan pengaman firmware (lihat
-[storage.md](storage.md)), dan beban CPU berkelanjutan seperti inferensi belum
-pernah diuji di catu daya step-down 12V→5V itu. Sebelum dan sesudah percobaan
-pertama:
+Ini sudah bukan peringatan teoretis. Saat Ollama dipakai sebagai agen Assist,
+Pi **reboot enam kali dalam satu jam** dan tidak bisa di-SSH. Pemeriksaannya
+mencatat **31 kejadian undervoltage**, termasuk saat idle satu menit sesudah
+boot — dengan **nol perangkat USB terpasang**.
+
+Artinya catu dayanya sendiri yang kurang, bukan bebannya. Penjelasan lengkap
+dan perbaikannya ada di [storage.md](storage.md#kesimpulan-itu-salah-terbukti-2026-09-19).
+
+Sampai adaptor 5,1V/5A USB-C PD terpasang, **profile ini jangan dinyalakan**:
 
 ```bash
-sudo dmesg | grep -ic undervolt
-vcgencmd get_throttled
+docker compose stop ollama
 ```
 
-`get_throttled` yang bukan `0x0` berarti sudah kena. Hentikan, dan urus catu
-dayanya sebelum melanjutkan — stack ini boot dari NVMe.
+Inferensi adalah penarik daya puncak terbesar di mesin ini, dan brownout saat
+NVMe menulis merusak filesystem — seluruh stack ada di disk itu.
+
+Home Assistant sendiri ringan dan boleh tetap jalan; yang berbahaya khusus
+Ollama.
+
+### Memantau sesudah PSU diganti
+
+```bash
+journalctl -k -b 0 | grep -ci undervolt
+```
+
+Nol berarti aman. `vcgencmd` tidak berguna di Ubuntu — `/dev/vcio` tidak ada,
+jadi pakai perintah di atas, bukan `vcgencmd get_throttled`.
 
 ## Kalau nanti Pi 4 dapat SSD
 
