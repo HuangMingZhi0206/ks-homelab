@@ -1,24 +1,40 @@
+---
 title: Homelab
+description: Syonin homelab
 theme: dark
 color: slate
-headerStyle: clean
+headerStyle: boxedWidgets
 hideVersion: true
 statusStyle: dot
+useEqualHeights: true
+disableCollapse: false
 
-# Two columns reads well on a phone in portrait; wider screens still fill out.
+# Background and card treatment. The gradient lives in custom.css rather than a
+# remote image: the page must stay fast and look right even when the WAN is
+# down, which is exactly when you open a homelab dashboard.
+cardBlur: sm
+
+# Group icons come from Material Design Icons; the trailing hex sets the colour.
+# Two columns is the widest that stays readable on a phone in portrait, and the
+# phone is where this page actually gets opened.
 layout:
   Infrastructure:
+    icon: mdi-server-network-#38bdf8
     style: row
     columns: 2
   Monitoring:
+    icon: mdi-chart-areaspline-#f472b6
     style: row
     columns: 2
   Storage:
+    icon: mdi-harddisk-#34d399
     style: row
     columns: 2
   Apps:
+    icon: mdi-rocket-launch-outline-#fbbf24
     style: row
     columns: 2
   Auth & Notifications:
+    icon: mdi-shield-key-outline-#a78bfa
     style: row
     columns: 2

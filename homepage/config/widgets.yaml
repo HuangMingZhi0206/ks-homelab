@@ -1,8 +1,18 @@
+# Header widgets. Order here is the order they appear.
+
+- search:
+    provider: duckduckgo
+    target: _blank
+
 - resources:
-    label: Host
+    label: Pi 5
     cpu: true
     memory: true
     disk: /
+    cputemp: true
+    uptime: true
+    tempmin: 0
+    tempmax: 85
 
 - datetime:
     text_size: xl
