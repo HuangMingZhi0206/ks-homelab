@@ -9,6 +9,12 @@
         icon: proxmox.svg
         href: https://192.168.200.10:8006
         description: Hypervisor — VMs & LXC
+        widget:
+          type: proxmox
+          url: "{{HOMEPAGE_VAR_PVE_URL}}"
+          username: "{{HOMEPAGE_VAR_PVE_USERNAME}}"
+          password: "{{HOMEPAGE_VAR_PVE_TOKEN}}"
+          node: "{{HOMEPAGE_VAR_PVE_NODE}}"
     - OPNsense:
         icon: opnsense.svg
         href: https://192.168.10.1

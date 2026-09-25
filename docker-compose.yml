@@ -377,6 +377,19 @@ services:
       - TZ=${TZ}
       - HOMEPAGE_ALLOWED_HOSTS=home.${DOMAIN}
       - HOMEPAGE_VAR_DOMAIN=${DOMAIN}
+      # Proxmox widget. Reuses the read-only API token already created for
+      # pve-exporter — see docs/monitoring-targets.md. The username Proxmox
+      # expects for a token is "user@realm!tokenname", assembled here so .env
+      # keeps the same three variables both services read.
+      - HOMEPAGE_VAR_PVE_URL=${PVE_URL:-https://192.168.200.10:8006}
+      - HOMEPAGE_VAR_PVE_USERNAME=${PVE_USER}!${PVE_TOKEN_NAME}
+      - HOMEPAGE_VAR_PVE_TOKEN=${PVE_TOKEN_VALUE}
+      - HOMEPAGE_VAR_PVE_NODE=${PVE_NODE:-pve}
+      # Proxmox serves a self-signed certificate. Homepage has no per-widget
+      # switch for that, so verification is disabled for the container as a
+      # whole. Acceptable only because this container talks to nothing outside
+      # the LAN; do not add an internet-facing widget while this is set.
+      - NODE_TLS_REJECT_UNAUTHORIZED=0
     volumes:
       - ./homepage/config:/app/config
       # Read-only socket for the docker status widget
