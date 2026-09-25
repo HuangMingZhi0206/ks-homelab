@@ -267,3 +267,37 @@ sebelumnya — dan semuanya tetap terlihat berhasil.
 | `COOLIFY_UUID` | uuid aplikasi, bagian setelah `uuid=` pada Deploy webhook URL |
 
 `GITHUB_TOKEN` tidak perlu dibuat; Actions menyediakannya sendiri.
+
+### Batasnya: perubahan compose tidak ikut otomatis
+
+Coolify **tidak** membaca `docker-compose.yml` dari repo setiap deploy. Dia
+memakai salinan yang tersimpan di databasenya, yang hanya diperbarui saat kamu
+menekan **Load compose**.
+
+Akibatnya:
+
+| Yang diubah | Cukup push? |
+|---|---|
+| Kode aplikasi | ya |
+| `Dockerfile` | ya — image dibangun ulang oleh Actions |
+| `docker-compose.yml` | **tidak** — perlu Load compose lalu Deploy |
+
+Gejala kalau lupa: deploy berhasil tapi menjalankan image versi lama, dan
+semuanya tetap terlihat hijau. Cara memastikan apa yang benar-benar dipakai:
+
+```bash
+docker ps --filter name=web-<uuid-8-karakter-pertama>
+```
+
+Kolom IMAGE-nya harus tag yang kamu harapkan.
+
+**Load compose juga membaca dari branch yang diset di Git Source.** Kalau
+branch-nya salah, Load compose ikut salah — dan itu tidak kelihatan sama
+sekali. Periksa branch dulu sebelum menekan Load compose.
+
+**Load compose membuat baris Environment Variable baru yang kosong** untuk
+setiap `${VAR}` di compose, berdampingan dengan yang lama. Duplikat kosong itu
+tidak bisa dihapus selama variabelnya masih dirujuk compose, dan tidak
+mengganggu selama salah satu barisnya berisi nilai. Yang berbahaya adalah
+variabel yang memang belum pernah diisi: aplikasi yang memvalidasi env di awal
+akan gagal start berulang, dan pesannya hanya ada di log container.
