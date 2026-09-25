@@ -323,8 +323,8 @@ tidak bisa diuji dari repo ini.
 ## Home Assistant tidak di belakang Authelia
 
 Router `homeassistant` sengaja **tanpa** `authelia@file`. Aplikasi Companion di
-HP berbicara ke API secara langsung dan tidak bisa mengikuti redirect SSO —
-alasan yang sama seperti ntfy. Home Assistant punya login sendiri; nyalakan 2FA
+HP berbicara ke API secara langsung dan tidak bisa mengikuti redirect SSO.
+Home Assistant punya login sendiri; nyalakan 2FA
 di **Profile → Multi-factor authentication**.
 
 ## `trusted_proxies` itu wajib

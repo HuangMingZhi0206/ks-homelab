@@ -34,7 +34,7 @@ layout:
     icon: mdi-rocket-launch-outline-#fbbf24
     style: row
     columns: 2
-  Auth & Notifications:
+  Auth:
     icon: mdi-shield-key-outline-#a78bfa
     style: row
     columns: 2

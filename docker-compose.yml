@@ -55,8 +55,6 @@ volumes:
   portainer_data:
   adguard_work:
   adguard_conf:
-  ntfy_cache:
-  ntfy_data:
   filebrowser_data:
   filebrowser_quantum_data:
   nextcloud_html:
@@ -327,42 +325,6 @@ services:
       traefik.http.routers.adguard.middlewares: authelia@file
       traefik.http.services.adguard.loadbalancer.server.port: "3000"
 
-  # Ntfy — deliberately NOT behind Authelia: mobile apps subscribe directly
-  # and can't follow the SSO redirect. Ntfy's own auth is set to deny-all;
-  # create users with: docker compose exec ntfy ntfy user add --role=admin <name>
-  ntfy:
-    image: binwiederhier/ntfy:v2.11.0  # check for newer releases
-    container_name: ntfy
-    restart: unless-stopped
-    profiles:
-      - ntfy
-    command: serve
-    security_opt:
-      - no-new-privileges:true
-    networks:
-      - proxy
-    environment:
-      - TZ=${TZ}
-      - NTFY_BASE_URL=https://ntfy.${DOMAIN}
-      - NTFY_BEHIND_PROXY=true
-      - NTFY_CACHE_FILE=/var/cache/ntfy/cache.db
-      - NTFY_AUTH_FILE=/var/lib/ntfy/auth.db
-      - NTFY_AUTH_DEFAULT_ACCESS=deny-all
-      # A body larger than this is treated as an attachment, and attachments are
-      # off — so an oversized publish fails as "attachments not allowed" rather
-      # than anything mentioning size. Grafana webhook payloads carry the full
-      # alert JSON and blow past the 4K default, so raise it.
-      - NTFY_MESSAGE_SIZE_LIMIT=16384
-    volumes:
-      - ntfy_cache:/var/cache/ntfy
-      - ntfy_data:/var/lib/ntfy
-    labels:
-      traefik.enable: "true"
-      traefik.http.routers.ntfy.rule: Host(`ntfy.${DOMAIN}`)
-      traefik.http.routers.ntfy.entrypoints: websecure
-      traefik.http.routers.ntfy.tls.certresolver: letsencrypt
-      traefik.http.services.ntfy.loadbalancer.server.port: "80"
-
   homepage:
     image: ghcr.io/gethomepage/homepage:latest  # pin a specific version for production
     container_name: homepage
@@ -503,8 +465,8 @@ services:
   # ==============================================================================
   # Deliberately NOT behind authelia@file. The desktop sync client and the phone
   # app speak WebDAV, not a browser session, so they cannot follow an SSO
-  # redirect — the same reason ntfy sits outside it. Nextcloud's own login is
-  # what guards this; turn on 2FA in its admin settings.
+  # redirect. Nextcloud's own login is what guards this; turn on 2FA in its
+  # admin settings.
   #
   # Its own data directory lives on a named volume (the NVMe), NOT on the NTFS
   # disk: Nextcloud chowns and locks files there, which ntfs3 cannot express.
@@ -670,8 +632,8 @@ services:
       traefik.http.routers.homeassistant.entrypoints: websecure
       traefik.http.routers.homeassistant.tls.certresolver: letsencrypt
       # Deliberately NO authelia@file. The Companion app on a phone talks to
-      # the API directly and cannot follow an SSO redirect — the same reason
-      # ntfy sits outside it. Home Assistant has its own login; turn on its 2FA.
+      # the API directly and cannot follow an SSO redirect. Home Assistant has
+      # its own login; turn on its 2FA.
       traefik.http.services.homeassistant.loadbalancer.server.port: "8123"
 
   # Speech to text. `--language auto` is what makes bilingual work: the model

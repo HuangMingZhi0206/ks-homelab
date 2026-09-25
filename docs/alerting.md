@@ -6,22 +6,27 @@ semuanya ter-versioning di git seperti datasource dan dashboard.
 
 ## Kenapa Grafana, bukan Alertmanager
 
-Alertmanager tidak bisa mengirim ke ntfy tanpa container jembatan tambahan, dan
+Alertmanager perlu container tambahan untuk mengirim ke mana pun di sini, dan
 Telegram-nya pun perlu Alertmanager sendiri. Itu berarti **dua container baru di
 Pi yang catu dayanya sedang tidak sanggup** (lihat [storage.md](storage.md)).
 
 Grafana sudah jalan dan punya alerting bawaan yang menanyakan Prometheus
 langsung. Nol container baru.
 
-## Kenapa Telegram, bukan ntfy
+## Kenapa Telegram, dan kenapa ntfy dihapus
 
-ntfy sudah ada di stack ini, tapi alamatnya `ntfy.lab.<domain>` — **internal
+ntfy sempat dipakai di stack ini, tapi alamatnya `ntfy.lab.<domain>` — **internal
 saja**, sengaja tanpa DNS publik. Artinya notifikasinya hanya sampai saat kamu
 di rumah atau Tailscale aktif. Itu justru kebalikan dari gunanya alert.
 
 Telegram **keluar saja**: Grafana memanggil `api.telegram.org` lewat HTTPS, dan
 Telegram yang mengantar ke HP. Tidak ada port dibuka, tidak ada tunnel, tidak
 ada nama DNS baru — dan CGNAT tidak jadi masalah sama sekali.
+
+Karena itu ntfy dihapus dari stack: ia hanya menambah satu container pada Pi
+yang catu dayanya sudah mepet, sambil mengantar pesan ke tempat yang tidak
+memerlukannya. Volume `homelab_ntfy_cache` dan `homelab_ntfy_data` ditinggalkan
+begitu saja — hapus manual kalau mau bersih.
 
 WhatsApp dipertimbangkan dan ditolak: tidak didukung Grafana, dan jalurnya
 hanya lewat gateway berbayar atau library tidak resmi yang bisa membuat akun
@@ -131,7 +136,7 @@ untuk tidak jadi kebisingan.
 ## Menutup lubang terakhir: heartbeat ke luar
 
 **Grafana jalan di Pi.** Kalau Pi mati, Grafana ikut mati, dan tidak ada alert
-yang terkirim. Prometheus dan ntfy juga di sana. Sistem alert di atas menangkap
+yang terkirim. Prometheus juga di sana. Sistem alert di atas menangkap
 Dell mati, switch mati, disk penuh, suhu naik — tapi **tidak bisa memberi tahu
 bahwa dirinya sendiri hilang**.
 

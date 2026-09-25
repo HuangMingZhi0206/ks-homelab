@@ -69,12 +69,8 @@
     #    href: http://192.168.10.x:8123
     #    description: Home automation
 
-- Auth & Notifications:
+- Auth:
     - Authelia:
         icon: authelia.svg
         href: https://auth.{{HOMEPAGE_VAR_DOMAIN}}
         description: SSO portal
-    - Ntfy:
-        icon: ntfy.svg
-        href: https://ntfy.{{HOMEPAGE_VAR_DOMAIN}}
-        description: Push notifications

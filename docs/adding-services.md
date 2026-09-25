@@ -39,12 +39,12 @@ Line by line:
 | `routers.<name>.rule` | The hostname. `${DOMAIN}` comes from `.env`. Router names must be unique. |
 | `entrypoints: websecure` | Port 443. Port 80 already redirects here. |
 | `tls.certresolver` | **Required.** The entrypoint `certResolver` is only a default for routers that are already TLS-enabled, so a router without this label never gets a Let's Encrypt certificate — it silently falls back to the self-signed default with no error anywhere. |
-| `middlewares: authelia@file` | Forward-auth SSO. **Drop this line** for public services or apps with API clients that can't follow browser redirects (see Ntfy). |
+| `middlewares: authelia@file` | Forward-auth SSO. **Drop this line** for public services or apps with API clients that can't follow browser redirects (see Nextcloud and Home Assistant). |
 | `loadbalancer.server.port` | The port the app listens on *inside* the container. Needed whenever the image exposes more than one port (safe to always set). |
 
 ## When NOT to use the Authelia middleware
 
-- **Native mobile/desktop apps or webhooks** talk to the API directly and can't complete a browser SSO redirect (this is why `ntfy` relies on its own `deny-all` auth instead).
+- **Native mobile/desktop apps or webhooks** talk to the API directly and can't complete a browser SSO redirect (this is why `nextcloud` and the `voice` profile rely on their own logins instead).
 - Apps with their own robust auth that must stay reachable by third parties.
 
 For mixed cases, Authelia access-control rules in [authelia/configuration.yml](../authelia/configuration.yml) support per-path `bypass` policies.

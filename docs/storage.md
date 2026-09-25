@@ -348,5 +348,5 @@ Jadwalkan lewat cron di host, misalnya tiap 15 menit:
 
 Router `nextcloud` sengaja tidak memakai `authelia@file`. Klien sync desktop dan
 aplikasi HP berbicara WebDAV, bukan sesi browser, jadi mereka tidak bisa
-mengikuti redirect SSO — alasan yang sama dengan ntfy. Yang menjaganya login
+mengikuti redirect SSO. Yang menjaganya login
 Nextcloud sendiri; nyalakan 2FA di pengaturannya.

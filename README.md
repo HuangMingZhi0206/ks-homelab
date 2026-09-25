@@ -125,19 +125,18 @@ The default policy in [authelia/configuration.yml](authelia/configuration.yml) i
 
 Five alert rules and a Telegram contact point are provisioned from `monitoring/grafana/provisioning/alerting/` — no clicking, and they live in git like everything else. Set `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` in `.env` and run `docker compose up -d grafana`.
 
-Grafana rather than Alertmanager because Alertmanager needs a bridge container to reach ntfy, and this Pi has no power budget to spare. Telegram rather than ntfy because ntfy here is internal-only, so it would only reach you at home — the one place you do not need telling.
+Grafana rather than Alertmanager, because Alertmanager would need a bridge container to reach anything here and this Pi has no power budget to spare. Telegram rather than a self-hosted notifier, because Telegram is outbound-only: Grafana calls `api.telegram.org` and the message reaches the phone anywhere. This stack ran ntfy for a while, but it lived on `lab.<domain>` with no public DNS on purpose, so alerts only ever arrived at home — the one place you do not need telling. It was removed.
 
 **It cannot tell you the Pi itself died**, because Grafana runs on the Pi. [`scripts/heartbeat.sh`](scripts/heartbeat.sh) closes that gap from outside: cron pings healthchecks.io every five minutes, and they email you when the pings stop. It checks the core containers too, so a Pi that is up with Traefik dead reports a failure rather than a cheerful ping — see [docs/alerting.md](docs/alerting.md).
 
 ## Optional services (Compose profiles)
 
-Nine optional services ship disabled by default. Enable them by setting `COMPOSE_PROFILES` in `.env` (comma-separated) and running `docker compose up -d`, or ad hoc with `docker compose --profile <name> up -d`:
+Eight optional services ship disabled by default. Enable them by setting `COMPOSE_PROFILES` in `.env` (comma-separated) and running `docker compose up -d`, or ad hoc with `docker compose --profile <name> up -d`:
 
 | Profile | Service | URL | Notes |
 |---|---|---|---|
 | `portainer` | Portainer CE | `https://portainer.<domain>` | Container management UI, behind Authelia |
 | `adguard` | AdGuard Home | `https://adguard.<domain>` | Publishes port **53** on the host for DNS. During the first-run wizard, set the admin web port to **3000**. If systemd-resolved holds port 53, disable its stub listener first (`DNSStubListener=no` in `/etc/systemd/resolved.conf`). |
-| `ntfy` | Ntfy | `https://ntfy.<domain>` | Push notifications. **Not** behind Authelia (mobile apps can't follow SSO redirects) — its own auth defaults to deny-all; create users with `docker compose exec ntfy ntfy user add --role=admin <name>` |
 | `homepage` | Homepage | `https://home.<domain>` | Start-page dashboard, config in `homepage/config/`, behind Authelia |
 | `pve-exporter` | Proxmox exporter | — | Scrapes a Proxmox host into Prometheus. Needs an API token — see [docs/monitoring-targets.md](docs/monitoring-targets.md) |
 | `snmp-exporter` | SNMP exporter | — | Scrapes a managed switch into Prometheus (per-port traffic, link state) — see [docs/monitoring-targets.md](docs/monitoring-targets.md) |

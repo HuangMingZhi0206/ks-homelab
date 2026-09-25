@@ -2,8 +2,8 @@
 #
 # Heartbeat to healthchecks.io, from cron on the Pi.
 #
-# This exists to cover the one thing the Grafana alerts cannot: Grafana,
-# Prometheus and ntfy all run on this Pi, so when the Pi goes down nothing is
+# This exists to cover the one thing the Grafana alerts cannot: Grafana and
+# Prometheus both run on this Pi, so when the Pi goes down nothing is
 # left to tell you. healthchecks.io watches from outside — if these pings stop
 # arriving, it emails you.
 #
