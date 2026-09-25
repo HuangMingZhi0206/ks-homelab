@@ -31,9 +31,13 @@ auth:
       enabled: true
       header: Remote-User
 
-    # Password login is deliberately left enabled as a way back in if the
-    # header ever stops arriving. Change the default admin/admin password on
-    # first login, then disable this if you want header auth to be the only
-    # path.
+    # Password login is OFF. Proxy auth is proven working, and the built-in
+    # account resets to admin/admin every time the database is recreated — a
+    # standing way in that bypasses Authelia entirely.
+    #
+    # To get back in if Authelia ever stops sending the header: set this to
+    # true, run `docker compose up -d --force-recreate filebrowser`, and log in
+    # as admin/admin. The files stay reachable over Samba regardless, so this
+    # is never the only route to your data.
     password:
-      enabled: true
+      enabled: false
