@@ -3,6 +3,10 @@
 # Entries that point at a bare IP are appliances that live outside this stack
 # and outside lab.<domain>: they have their own TLS (self-signed) and their own
 # login. Homepage only links to them.
+#
+# Only list what is actually running. A tile that leads nowhere teaches you to
+# distrust the whole page — the commented blocks below are services whose
+# Compose profile is currently off, ready to uncomment when it is turned on.
 
 - Infrastructure:
     - Proxmox:
@@ -27,14 +31,16 @@
         icon: traefik.svg
         href: https://traefik.{{HOMEPAGE_VAR_DOMAIN}}
         description: Reverse proxy & TLS
-    - Portainer:
-        icon: portainer.svg
-        href: https://portainer.{{HOMEPAGE_VAR_DOMAIN}}
-        description: Container management
-    - AdGuard Home:
-        icon: adguard-home.svg
-        href: https://adguard.{{HOMEPAGE_VAR_DOMAIN}}
-        description: DNS & ad blocking
+    # Profile `portainer` is off. OPNsense already serves DNS for the house,
+    # so `adguard` is off too.
+    #- Portainer:
+    #    icon: portainer.svg
+    #    href: https://portainer.{{HOMEPAGE_VAR_DOMAIN}}
+    #    description: Container management
+    #- AdGuard Home:
+    #    icon: adguard-home.svg
+    #    href: https://adguard.{{HOMEPAGE_VAR_DOMAIN}}
+    #    description: DNS & ad blocking
 
 - Monitoring:
     - Grafana:
@@ -51,23 +57,24 @@
         icon: filebrowser.svg
         href: https://files.{{HOMEPAGE_VAR_DOMAIN}}
         description: USB disk on the Pi
-    - Nextcloud:
-        icon: nextcloud.svg
-        href: https://cloud.{{HOMEPAGE_VAR_DOMAIN}}
-        description: Files, calendar, contacts
+    # Profile `nextcloud` is off — it needs the mount permission change in
+    # docs/storage.md before it can write to the disk.
+    #- Nextcloud:
+    #    icon: nextcloud.svg
+    #    href: https://cloud.{{HOMEPAGE_VAR_DOMAIN}}
+    #    description: Files, calendar, contacts
 
 - Apps:
     - Coolify:
         icon: coolify.svg
         href: https://coolify.syonin.site
         description: Deploys the public sites
-    # Home Assistant is not deployed yet — planned for the Pi 4 on a USB SSD.
-    # Its own phone app is far better than a link: notifications, sensors,
-    # presence. Keep this entry as a shortcut, not as the way you use it.
-    #- Home Assistant:
-    #    icon: home-assistant.svg
-    #    href: http://192.168.10.x:8123
-    #    description: Home automation
+    # Running on this Pi, not the Pi 4. The Companion app is the better way in
+    # — notifications, phone sensors, presence — so treat this as a shortcut.
+    - Home Assistant:
+        icon: home-assistant.svg
+        href: https://ha.{{HOMEPAGE_VAR_DOMAIN}}
+        description: Home automation & voice
 
 - Auth:
     - Authelia:
