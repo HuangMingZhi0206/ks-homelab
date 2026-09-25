@@ -220,3 +220,50 @@ Verifikasi sebelum melanjutkan:
 ```bash
 docker exec -i <container-db> psql -U <user> -d <database> -c "\dt"
 ```
+
+## Otomatis: push ke main = tayang (GitHub Actions)
+
+Membangun di laptop lalu menyunting tag image sendiri itu lima langkah untuk
+satu perubahan warna. Untuk repo yang sering disentuh, pindahkan build ke
+Actions dan biarkan push yang jadi rilis.
+
+Alurnya:
+
+```
+push ke main
+  ├─ Actions: build image, dorong sebagai :latest dan :sha-<short>
+  └─ Actions: POST ke /api/v1/deploy milik Coolify
+       └─ Coolify: git pull, baca compose, tarik image, jalankan
+```
+
+`docker-compose.yml` menunjuk `:latest`, jadi rilis tidak perlu menyunting
+berkas apa pun. Rollback tetap ada karena setiap build juga didorong sebagai
+`sha-<short>`: ganti baris `image:` ke tag itu, Deploy, selesai.
+
+Contoh workflow ada di repo PortfolioKS, `.github/workflows/deploy.yml`.
+
+### Tiga hal yang menggagalkannya, semuanya sudah kena
+
+**`permission_denied: write_package` saat push ke GHCR.** Paket yang pertama
+kali didorong dari laptop memakai PAT tidak terhubung ke repo mana pun, dan
+`GITHUB_TOKEN` milik Actions tidak otomatis berhak menulis ke sana. Buka
+`github.com/users/<user>/packages/container/<paket>/settings` → **Manage
+Actions access** → Add Repository → beri Role **Write**. Ini berbeda dari
+tombol "Connect repository", yang hanya urusan tampilan.
+
+**`405 This endpoint has changed to a POST request`.** Endpoint deploy Coolify
+dulu menerima GET; sekarang wajib `-X POST`. URL contoh di tab Webhooks
+aplikasi masih ditulis sebagai URL biasa, jadi mudah tertipu.
+
+**`force=true` itu wajib pada tag bergerak.** Tanpa itu Coolify bisa memakai
+ulang image `:latest` yang sudah ada di disknya, lalu menayangkan build
+sebelumnya — dan semuanya tetap terlihat berhasil.
+
+### Secret yang diperlukan di repo aplikasi
+
+| Secret | Isi |
+|---|---|
+| `COOLIFY_TOKEN` | API token Coolify, izin `deploy` |
+| `COOLIFY_UUID` | uuid aplikasi, bagian setelah `uuid=` pada Deploy webhook URL |
+
+`GITHUB_TOKEN` tidak perlu dibuat; Actions menyediakannya sendiri.
