@@ -131,7 +131,7 @@ Grafana rather than Alertmanager, because Alertmanager would need a bridge conta
 
 ## Optional services (Compose profiles)
 
-Eight optional services ship disabled by default. Enable them by setting `COMPOSE_PROFILES` in `.env` (comma-separated) and running `docker compose up -d`, or ad hoc with `docker compose --profile <name> up -d`:
+Nine optional services ship disabled by default. Enable them by setting `COMPOSE_PROFILES` in `.env` (comma-separated) and running `docker compose up -d`, or ad hoc with `docker compose --profile <name> up -d`:
 
 | Profile | Service | URL | Notes |
 |---|---|---|---|
@@ -140,6 +140,7 @@ Eight optional services ship disabled by default. Enable them by setting `COMPOS
 | `homepage` | Homepage | `https://home.<domain>` | Start-page dashboard, config in `homepage/config/`, behind Authelia |
 | `pve-exporter` | Proxmox exporter | — | Scrapes a Proxmox host into Prometheus. Needs an API token — see [docs/monitoring-targets.md](docs/monitoring-targets.md) |
 | `snmp-exporter` | SNMP exporter | — | Scrapes a managed switch into Prometheus (per-port traffic, link state) — see [docs/monitoring-targets.md](docs/monitoring-targets.md) |
+| `blackbox` | Blackbox exporter | — | Probes the internal `lab.<domain>` hostnames so a certificate that stops renewing is caught weeks before a browser complains |
 | `filebrowser` | File Browser Quantum | `https://files.<domain>` | Web file manager for the USB disk on the host, with thumbnails and indexed search. Uses proxy auth so Authelia is the only login — which means it must never publish a port. Set `STORAGE_PATH` and mount the disk first — see [docs/storage.md](docs/storage.md) |
 | `nextcloud` | Nextcloud (+ Postgres, Redis) | `https://cloud.<domain>` | File sync over the same USB disk, attached as External Storage. **Not** behind Authelia — sync clients speak WebDAV and cannot follow an SSO redirect. Needs a mount-permission change first — see [docs/storage.md](docs/storage.md) |
 | `voice` | Home Assistant + Whisper + Piper + Ollama (**Ollama stopped**: the Pi browns out under it, see [docs/storage.md](docs/storage.md)) | `https://ha.<domain>` | Bilingual ID/EN voice assistant for time, temperature and free space. **Not** behind Authelia — the Companion app cannot follow an SSO redirect. Whisper/Piper/Ollama run on all four cores at a lower `cpu_shares` weight, so inference runs flat out on an idle Pi and yields to DNS and monitoring under contention — see [docs/voice-assistant.md](docs/voice-assistant.md) |
