@@ -71,7 +71,10 @@ status_report() {
 offset=0
 [[ -r "$STATE" ]] && offset="$(cat "$STATE")"
 
-updates="$(curl -fsS -m 20 "${API}/getUpdates?offset=${offset}&timeout=0&allowed_updates=[\"message\"]" 2>/dev/null)" || exit 0
+# No allowed_updates filter: its value needs quotes, and an unencoded quote in
+# the URL makes curl refuse the request outright — silently, because stderr is
+# discarded here. The jq select below does the same filtering anyway.
+updates="$(curl -fsS -m 20 "${API}/getUpdates?offset=${offset}&timeout=0" 2>/dev/null)" || exit 0
 echo "$updates" | jq -e '.ok' >/dev/null 2>&1 || exit 0
 
 # Advance the offset even for messages we ignore, or an unrelated message sits
