@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Answer /status in Telegram with the state of this machine.
+# Answer /status and /pve in Telegram.
 #
 # Run from cron every minute:
 #   * * * * * /opt/homelab/scripts/telegram-status.sh
@@ -9,7 +9,7 @@
 # Grafana and heartbeat.sh already send through.
 #
 # IMPORTANT: only one process may poll getUpdates for a given bot. If you ever
-# add the Telegram integration in Home Assistant, give it its own bot or this
+# add the Telegram integration in Home Assistant, give it its own bot, or this
 # script and that integration will steal each other's messages.
 #
 # Replies only to TELEGRAM_CHAT_ID. Anyone else who finds the bot gets silence,
@@ -34,18 +34,29 @@ send() {
 }
 
 # Prometheus is not published on the host, so ask it from inside its own
-# container. $2 is a jq expression run against each result element.
-promq() {
+# container. The query is URL-encoded here so PromQL can be written plainly.
+prom() {
   docker exec prometheus wget -qO- \
-    "http://127.0.0.1:9090/api/v1/query?query=$(printf '%s' "$1" | jq -sRr @uri)" 2>/dev/null |
-    jq -r "[.data.result[] | $2] | join(\", \")" 2>/dev/null
+    "http://127.0.0.1:9090/api/v1/query?query=$(printf '%s' "$1" | jq -sRr @uri)" 2>/dev/null
 }
 
+# A comma-joined list built from each result element ($2 is a jq expression).
+prom_list() {
+  prom "$1" | jq -r "[.data.result[] | $2] | join(\", \")" 2>/dev/null
+}
+
+# A single scalar, or empty when the metric is missing.
+prom_one() {
+  prom "$1" | jq -r '.data.result[0].value[1] // empty' 2>/dev/null
+}
+
+pct() { [[ -n "$1" ]] && awk -v v="$1" 'BEGIN{printf "%.0f%%", v*100}' || echo '?'; }
+
 status_report() {
-  local up load temp undervolt disk hdd stopped
+  local up load temp undervolt disk hdd stopped firing
   up="$(uptime -p 2>/dev/null || echo '?')"
   load="$(cut -d' ' -f1-3 /proc/loadavg)"
-  undervolt="$(journalctl -k -b 0 2>/dev/null | grep -ci undervolt || echo '?')"
+  undervolt="$(journalctl -k -b 0 2>/dev/null | grep -ci undervolt || true)"
   disk="$(df -h / | awk 'NR==2 {print $4" free of "$2" ("$5" used)"}')"
 
   # Millidegrees on this kernel; /1000 for something readable.
@@ -66,32 +77,56 @@ status_report() {
   stopped="$(docker ps -a --filter label=com.docker.compose.project --filter status=exited --format '{{.Names}}' 2>/dev/null | paste -sd' ' -)"
   [[ -n "$stopped" ]] || stopped="none"
 
-  # Everything below comes from Prometheus and Grafana, which already know the
-  # answers — asking them beats reimplementing the checks here and drifting
-  # out of step with what actually alerts.
-  local down_targets guests firing
-  down_targets="$(promq 'up == 0' '.metric.job + "/" + .metric.instance')"
-  [[ -n "$down_targets" ]] || down_targets="none"
-
-  guests="$(promq 'pve_up == 0' '.metric.id')"
-  [[ -n "$guests" ]] || guests="none"
-
   firing="$(docker exec grafana wget -qO- \
     'http://127.0.0.1:3000/api/prometheus/grafana/api/v1/rules' 2>/dev/null |
     jq -r '[.data.groups[].rules[] | select(.state=="firing") | .name] | join(", ")' 2>/dev/null)"
   [[ -n "$firing" && "$firing" != "null" ]] || firing="none"
 
-  printf '%s\n\n' "📊 ${HOSTNAME:-pi} status"
+  printf '%s\n\n' "📊 Pi — ${HOSTNAME:-pi}"
   printf 'up        : %s\n' "$up"
   printf 'load      : %s\n' "$load"
   printf 'cpu temp  : %s\n' "$temp"
-  printf 'undervolt : %s this boot\n' "$undervolt"
+  printf 'undervolt : %s this boot\n' "${undervolt:-0}"
   printf 'root disk : %s\n' "$disk"
   printf 'hdd       : %s\n' "$hdd"
   printf 'stopped   : %s\n' "$stopped"
-  printf 'targets   : %s down\n' "$down_targets"
-  printf 'pve guests: %s down\n' "$guests"
   printf 'alerts    : %s\n' "$firing"
+}
+
+pve_report() {
+  local cpu mem_u mem_t mem running down nobackup targets
+
+  cpu="$(pct "$(prom_one 'pve_cpu_usage_ratio{id="node/pve"}')")"
+  mem_u="$(prom_one 'pve_memory_usage_bytes{id="node/pve"}')"
+  mem_t="$(prom_one 'pve_memory_size_bytes{id="node/pve"}')"
+  if [[ -n "$mem_u" && -n "$mem_t" && "$mem_t" != "0" ]]; then
+    mem="$(awk -v u="$mem_u" -v t="$mem_t" 'BEGIN{printf "%.1f of %.1f GiB (%.0f%%)", u/1073741824, t/1073741824, u/t*100}')"
+  else
+    mem="?"
+  fi
+
+  running="$(prom_list 'pve_up{id=~"qemu/.*|lxc/.*"} == 1' '.metric.id')"
+  [[ -n "$running" ]] || running="none"
+  down="$(prom_list 'pve_up{id=~"qemu/.*|lxc/.*"} == 0' '.metric.id')"
+  [[ -n "$down" ]] || down="none"
+
+  # Proxmox counts this itself. Worth showing rather than alerting on: the
+  # backups are a known gap, and an alert for something you already decided to
+  # defer is just noise.
+  nobackup="$(prom_one 'pve_not_backed_up_total')"
+
+  # Anything Prometheus cannot scrape at all — the Dell itself, the switch,
+  # an exporter that died.
+  targets="$(prom_list 'up == 0' '.metric.job + "/" + .metric.instance')"
+  [[ -n "$targets" ]] || targets="none"
+
+  printf '%s\n\n' "🖥 Proxmox — pve"
+  printf 'cpu       : %s\n' "$cpu"
+  printf 'memory    : %s\n' "$mem"
+  printf 'running   : %s\n' "$running"
+  printf 'down      : %s\n' "$down"
+  printf 'no backup : %s guests\n' "${nobackup:-?}"
+  printf 'targets   : %s down\n' "$targets"
 }
 
 offset=0
@@ -104,7 +139,7 @@ updates="$(curl -fsS -m 20 "${API}/getUpdates?offset=${offset}&timeout=0" 2>/dev
 echo "$updates" | jq -e '.ok' >/dev/null 2>&1 || exit 0
 
 # Advance the offset even for messages we ignore, or an unrelated message sits
-# at the head of the queue forever and every later /status is never seen.
+# at the head of the queue forever and every later command is never seen.
 last="$(echo "$updates" | jq -r '[.result[].update_id] | max // empty')"
 [[ -n "$last" ]] && echo $((last + 1)) > "$STATE"
 
@@ -113,6 +148,7 @@ echo "$updates" | jq -r --arg chat "$TELEGRAM_CHAT_ID" \
 while read -r text; do
   case "$text" in
     /status*) send "$(status_report)" ;;
-    /help*)   send "Commands: /status" ;;
+    /pve*)    send "$(pve_report)" ;;
+    /help*)   send "/status — this Pi and its alerts"$'\n'"/pve — Proxmox node, guests and scrape targets" ;;
   esac
 done
