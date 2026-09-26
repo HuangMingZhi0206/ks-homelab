@@ -44,7 +44,11 @@ done
 # Carried in the ping body so it shows up in the check's history on
 # healthchecks.io. On this Pi that matters: the power supply has been dropping
 # voltage, and a count climbing between heartbeats is the evidence.
-undervolt="$(journalctl -k -b 0 2>/dev/null | grep -ci undervolt || echo '?')"
+# `|| true`, not `|| echo '?'`: grep -c prints its count *and* exits 1 when the
+# count is zero, so the fallback used to append a second line and the value
+# became "0\n?" — which then broke every numeric comparison on it.
+undervolt="$(journalctl -k -b 0 2>/dev/null | grep -ci undervolt || true)"
+undervolt="${undervolt:-0}"
 
 uptime_s="$(cut -d' ' -f1 /proc/uptime | cut -d. -f1)"
 
@@ -81,7 +85,7 @@ telegram() {
 # alerted on. It matters here more than anywhere: the counter climbing while
 # the machine stays up is the early warning that the supply is sagging under
 # load, hours before it starts cutting out entirely.
-if [[ "$undervolt" != "?" && "$undervolt" -gt 0 ]]; then
+if [[ "$undervolt" -gt 0 ]]; then
   telegram "⚡ ${HOSTNAME:-pi} undervoltage x${undervolt} this boot — the power supply is sagging. See docs/storage in the repo."
 fi
 
