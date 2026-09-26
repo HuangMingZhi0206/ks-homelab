@@ -301,3 +301,54 @@ tidak bisa dihapus selama variabelnya masih dirujuk compose, dan tidak
 mengganggu selama salah satu barisnya berisi nilai. Yang berbahaya adalah
 variabel yang memang belum pernah diisi: aplikasi yang memvalidasi env di awal
 akan gagal start berulang, dan pesannya hanya ada di log container.
+
+## Repo kode privat: pisahkan compose-nya
+
+Coolify meng-clone repo untuk membaca `docker-compose.yml`, jadi repo itu harus
+terbaca tanpa kredensial. Begitu repo kode dijadikan privat, Load compose dan
+setiap deploy berikutnya gagal — dan resource yang dibuat sebagai **Public
+Repository** tidak bisa diubah tipenya jadi Deploy Key belakangan.
+
+Jalan keluarnya bukan mengubah tipe resource, melainkan memindahkan berkas yang
+harus publik:
+
+```
+deploy-configs/            (publik)
+├── portfolio/docker-compose.yml
+├── porto-angel/docker-compose.yml
+└── angel/docker-compose.yaml
+```
+
+Tiap aplikasi Coolify diarahkan ke repo itu — Git Source → Repository, dan
+Build pipeline → Docker compose location. Repo kode lalu boleh diprivatkan.
+
+Kenapa ini aman: compose hanya memuat nama image, port, dan **nama** variabel.
+Nilainya tetap di Coolify. Tidak ada kode dan tidak ada rahasia yang ikut
+terbuka.
+
+Kenapa ini lebih murah daripada membuat ulang resource: uuid tidak berubah,
+jadi secret `COOLIFY_UUID` di repo tetap berlaku, dan domain serta environment
+variable tidak perlu diisi ulang. Tidak ada downtime.
+
+Dan kalau suatu saat repo kode dibuka lagi, tidak ada yang perlu dikembalikan —
+pemisahan ini bekerja terlepas dari visibilitas repo di sebelahnya.
+
+### Tiga hal yang menggagalkannya
+
+**Branch.** Repo `deploy-configs` memakai `main`. Aplikasi yang tadinya
+menunjuk repo ber-branch `master` akan tetap mencari `master` di repo baru dan
+gagal tanpa penjelasan yang jelas.
+
+**Urutan.** Ganti Repository dulu, baru Load compose. Selama Repository masih
+menunjuk repo yang sudah privat, Load compose selalu gagal.
+
+**Visibilitas paket GHCR.** Paket yang dibuat Actions mewarisi visibilitas repo
+saat dibuat. Setelah repo diprivatkan, pastikan paketnya masih Public:
+
+```bash
+sudo docker pull ghcr.io/<user>/<paket>:latest
+```
+
+Butuh `sudo`: user biasa di VM ini tidak masuk grup `docker`, dan penolakan
+socket berbunyi mirip penolakan registry — bedakan keduanya. Yang dari registry
+menyebut nama paket; yang dari socket menyebut `unix:///var/run/docker.sock`.
