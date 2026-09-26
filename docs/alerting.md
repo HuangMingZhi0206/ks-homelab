@@ -219,3 +219,40 @@ Konsekuensi yang disengaja: setiap reboot yang wajar — pembaruan kernel,
 restart yang Anda lakukan sendiri — juga memicu satu email. Itu harga yang
 murah; reboot di mesin ini memang jarang, dan yang tidak Anda rencanakan justru
 yang ingin Anda tahu.
+
+### Dua lapis, dan kenapa keduanya perlu
+
+`heartbeat.sh` sekarang mengirim ke **Telegram langsung** untuk reboot dan
+container inti yang mati, memakai kredensial yang sudah ada di `.env` untuk
+Grafana. Ping ke healthchecks.io tetap jalan.
+
+Bukan duplikasi:
+
+| | Telegram dari skrip | healthchecks.io |
+|---|---|---|
+| Asal pesan | dari dalam rumah | dari luar rumah |
+| Bisa melapor saat Pi reboot | ya — sesudah boot Pi hidup | ya |
+| Bisa melapor saat Pi **mati total** | tidak | ya |
+| Sampai dalam | ≤ 5 menit | sesuai grace period |
+
+Telegram cepat dan mendarat di tempat yang benar-benar dibaca, tapi hanya bisa
+bicara selama Pi hidup. healthchecks.io lambat tapi satu-satunya yang tetap
+bekerja saat mesinnya hilang sama sekali.
+
+### Menguji skrip ini: jalankan dari dalam folder repo
+
+`heartbeat.sh` menghitung letak repo dari posisi berkasnya sendiri, lalu
+membaca `.env` dari situ. Menyalinnya ke `/tmp` untuk diuji membuatnya
+menyimpulkan repo-nya di `/`, tidak menemukan `.env`, dan **keluar diam-diam**
+dengan status 0 di baris pengaman `[[ -n "${HEALTHCHECKS_URL:-}" ]] || exit 0`.
+
+Ujinya terlihat berhasil padahal tidak ada apa pun yang terkirim. Salin ke
+`scripts/` kalau perlu memodifikasinya untuk pengujian:
+
+```bash
+cd /opt/homelab
+sed s@/proc/uptime@/tmp/fakeuptime@ scripts/heartbeat.sh > scripts/hb-test.sh
+printf "77.00 1.00\n" > /tmp/fakeuptime
+bash scripts/hb-test.sh
+rm -f scripts/hb-test.sh /tmp/fakeuptime
+```
