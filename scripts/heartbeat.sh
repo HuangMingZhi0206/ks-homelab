@@ -62,10 +62,27 @@ body="host=$(hostname) uptime=${uptime_s}s undervoltage=${undervolt}"
 #
 # So say it explicitly. healthchecks.io emails on /fail without waiting for
 # anything on this machine to still be alive.
+# Telegram directly, reusing the credentials Grafana already has in .env.
+#
+# Two layers on purpose. This one is fast and lands where you actually look,
+# but it can only speak while the Pi is alive — which covers a reboot, because
+# after a reboot the Pi *is* alive. The healthchecks ping below is the other
+# half: it comes from outside the house, so it still works when this machine
+# is gone entirely. Neither replaces the other.
+telegram() {
+  [[ -n "${TELEGRAM_BOT_TOKEN:-}" && -n "${TELEGRAM_CHAT_ID:-}" ]] || return 0
+  curl -fsS -m 10 --retry 2 -X POST \
+    "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+    --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
+    --data-urlencode "text=$1" >/dev/null || true
+}
+
 if [[ "$uptime_s" -lt 600 ]]; then
+  telegram "🔴 ${HOSTNAME:-pi} rebooted ${uptime_s}s ago — ${body}"
   curl -fsS -m 10 --retry 3 --data-raw "REBOOTED ${uptime_s}s ago | ${body}" \
     "${HEALTHCHECKS_URL}/fail" >/dev/null
 elif [[ -n "$down" ]]; then
+  telegram "🔴 ${HOSTNAME:-pi} containers down:${down} — ${body}"
   curl -fsS -m 10 --retry 3 --data-raw "DOWN:${down} | ${body}" \
     "${HEALTHCHECKS_URL}/fail" >/dev/null
 else
