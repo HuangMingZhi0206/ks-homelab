@@ -156,3 +156,67 @@ groups:
               expression: A
               conditions:
                 - evaluator: {type: gt, params: [80]}
+
+      # The state a filesystem lands in after the kernel finds corruption it
+      # cannot fix while mounted. On this Pi that is not hypothetical: the
+      # power supply has cut mid-write more than once, and a root filesystem
+      # that has gone read-only looks fine from outside until something tries
+      # to write.
+      - uid: homelab-fs-readonly
+        title: Filesystem read-only
+        condition: B
+        for: 0s
+        labels:
+          severity: critical
+        annotations:
+          summary: '{{ $labels.instance }} remounted {{ $labels.mountpoint }} read-only. Suspect filesystem damage — check dmesg for EXT4-fs errors before rebooting.'
+        noDataState: OK
+        execErrState: OK
+        data:
+          - refId: A
+            relativeTimeRange: {from: 300, to: 0}
+            datasourceUid: prometheus
+            model:
+              refId: A
+              instant: true
+              expr: node_filesystem_readonly{mountpoint="/"}
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: {type: gt, params: [0]}
+
+      # Only the two guests that must always run: 100 is OPNsense, so losing it
+      # takes DNS, DHCP and routing with it; 101 is Coolify and the public
+      # sites. Deliberately not every guest — the old Docker-Host LXC is kept
+      # stopped on purpose, and an alert that fires forever teaches you to
+      # ignore the ones that matter.
+      - uid: homelab-pve-guest-down
+        title: Proxmox guest down
+        condition: B
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: '{{ $labels.id }} on Proxmox has been down for 5 minutes.'
+        noDataState: NoData
+        execErrState: Error
+        data:
+          - refId: A
+            relativeTimeRange: {from: 300, to: 0}
+            datasourceUid: prometheus
+            model:
+              refId: A
+              instant: true
+              expr: pve_up{id=~"qemu/(100|101)"}
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: {type: lt, params: [1]}

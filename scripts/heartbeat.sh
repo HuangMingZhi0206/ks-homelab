@@ -77,6 +77,14 @@ telegram() {
     --data-urlencode "text=$1" >/dev/null || true
 }
 
+# Undervoltage has no Prometheus metric, so this is the only place it can be
+# alerted on. It matters here more than anywhere: the counter climbing while
+# the machine stays up is the early warning that the supply is sagging under
+# load, hours before it starts cutting out entirely.
+if [[ "$undervolt" != "?" && "$undervolt" -gt 0 ]]; then
+  telegram "⚡ ${HOSTNAME:-pi} undervoltage x${undervolt} this boot — the power supply is sagging. See docs/storage in the repo."
+fi
+
 if [[ "$uptime_s" -lt 600 ]]; then
   telegram "🔴 ${HOSTNAME:-pi} rebooted ${uptime_s}s ago — ${body}"
   curl -fsS -m 10 --retry 3 --data-raw "REBOOTED ${uptime_s}s ago | ${body}" \
