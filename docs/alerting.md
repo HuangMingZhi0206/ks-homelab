@@ -188,3 +188,34 @@ Uji sekali secara manual:
 
 Tanpa `HEALTHCHECKS_URL` script-nya keluar diam-diam, jadi entri cron itu aman
 walau belum dikonfigurasi.
+## Titik buta: lingkaran reboot cepat
+
+Malam 26 September Pi reboot enam kali dan **tidak satu pun notifikasi
+terkirim**, padahal aturan `homelab-host-rebooted` sudah ada dan peruteannya
+benar.
+
+Sebabnya sederhana begitu dilihat: **Grafana mati bersama host-nya.** Urutan
+setelah tiap boot kira-kira begini —
+
+```
+stack naik ~60s → Grafana siap ~30s → evaluasi aturan (interval 1m)
+→ group_wait 30s → baru kirim
+```
+
+sekitar tiga menit. Pi-nya reboot tiap **dua** menit, jadi Grafana tidak pernah
+hidup cukup lama untuk sempat mengirim apa pun.
+
+`heartbeat.sh` juga tidak menolong dalam bentuk aslinya: ping-nya tiap 5 menit,
+dan host yang kembali dalam 2 menit terlihat sehat sempurna dari luar.
+
+Jadi justru kegagalan paling parah yang paling sunyi — keduanya hanya bekerja
+kalau mesinnya bertahan hidup.
+
+**Perbaikannya** ada di `scripts/heartbeat.sh`: kalau uptime di bawah 10 menit,
+skrip melapor ke `/fail` alih-alih ping biasa. healthchecks.io mengirim email
+dari luar rumah, tanpa menunggu apa pun di Pi masih hidup.
+
+Konsekuensi yang disengaja: setiap reboot yang wajar — pembaruan kernel,
+restart yang Anda lakukan sendiri — juga memicu satu email. Itu harga yang
+murah; reboot di mesin ini memang jarang, dan yang tidak Anda rencanakan justru
+yang ingin Anda tahu.

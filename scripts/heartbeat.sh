@@ -46,9 +46,26 @@ done
 # voltage, and a count climbing between heartbeats is the evidence.
 undervolt="$(journalctl -k -b 0 2>/dev/null | grep -ci undervolt || echo '?')"
 
-body="host=$(hostname) uptime=$(cut -d' ' -f1 /proc/uptime) undervoltage=${undervolt}"
+uptime_s="$(cut -d' ' -f1 /proc/uptime | cut -d. -f1)"
 
-if [[ -n "$down" ]]; then
+body="host=$(hostname) uptime=${uptime_s}s undervoltage=${undervolt}"
+
+# A fast reboot loop is invisible to everything else here, and it is the worst
+# failure this machine has. Grafana cannot report it because Grafana dies with
+# the host: after a reboot the stack needs ~60s to come up, Grafana another
+# ~30s, then a 1m rule interval and a 30s group_wait — about three minutes
+# before a message leaves. The night the power supply failed, the Pi was
+# rebooting every two minutes, so nothing was ever sent.
+#
+# The plain ping cannot report it either: these run every five minutes, and a
+# host that is back within two looks perfectly healthy from outside.
+#
+# So say it explicitly. healthchecks.io emails on /fail without waiting for
+# anything on this machine to still be alive.
+if [[ "$uptime_s" -lt 600 ]]; then
+  curl -fsS -m 10 --retry 3 --data-raw "REBOOTED ${uptime_s}s ago | ${body}" \
+    "${HEALTHCHECKS_URL}/fail" >/dev/null
+elif [[ -n "$down" ]]; then
   curl -fsS -m 10 --retry 3 --data-raw "DOWN:${down} | ${body}" \
     "${HEALTHCHECKS_URL}/fail" >/dev/null
 else
