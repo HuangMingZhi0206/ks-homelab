@@ -256,3 +256,13 @@ printf "77.00 1.00\n" > /tmp/fakeuptime
 bash scripts/hb-test.sh
 rm -f scripts/hb-test.sh /tmp/fakeuptime
 ```
+
+### Jangan tulis nama berkas `.md` di teks alert
+
+Telegram menautkan apa pun yang terlihat seperti alamat web, dan **`.md` itu
+domain resmi Moldova**. Jadi `docs/storage.md` di badan pesan berubah jadi
+tautan ke `http://storage.md` — situs asing yang tidak terbuka, dan pembacanya
+mengira alertnya rusak.
+
+Tulis tanpa ekstensinya: `docs/storage`. Berlaku juga untuk `.sh`, `.io`,
+`.co`, dan `.it` — semuanya TLD sungguhan.

@@ -52,7 +52,7 @@ groups:
         labels:
           severity: warning
         annotations:
-          summary: '{{ $labels.instance }} booted less than 10 minutes ago. If this repeats, suspect power — see docs/storage.md.'
+          summary: '{{ $labels.instance }} booted less than 10 minutes ago. If this repeats, suspect power — see docs/storage in the repo.'
         noDataState: OK
         execErrState: OK
         data:
