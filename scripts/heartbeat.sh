@@ -85,6 +85,27 @@ if [[ "$undervolt" != "?" && "$undervolt" -gt 0 ]]; then
   telegram "⚡ ${HOSTNAME:-pi} undervoltage x${undervolt} this boot — the power supply is sagging. See docs/storage in the repo."
 fi
 
+# The USB disk holds the only copy of the photo archive, on a drive that has
+# already used about half its rated head-park cycles and survived several
+# unclean power cuts. These three attributes are the ones that move *before* a
+# disk fails; everything else on a SMART report is wear, not warning.
+#
+# Alert only when a count goes up, not while it is merely non-zero — otherwise
+# the first bad sector would send a message every five minutes forever, and
+# you would mute the one channel that matters.
+SMART_STATE="${HOME}/.hdd-smart-counts"
+if command -v smartctl >/dev/null 2>&1 && [[ -b /dev/sda ]]; then
+  smart_now="$(sudo smartctl -A -d sat /dev/sda 2>/dev/null |
+    awk '$1==5||$1==197||$1==198 {printf "%s=%s ", $2, $10}')"
+  if [[ -n "$smart_now" ]]; then
+    smart_prev="$(cat "$SMART_STATE" 2>/dev/null || echo '')"
+    if [[ -n "$smart_prev" && "$smart_now" != "$smart_prev" ]]; then
+      telegram "💽 ${HOSTNAME:-pi} disk SMART changed: ${smart_now}(was ${smart_prev}) — back the archive up now, this is how a disk starts failing."
+    fi
+    printf '%s' "$smart_now" > "$SMART_STATE"
+  fi
+fi
+
 if [[ "$uptime_s" -lt 600 ]]; then
   telegram "🔴 ${HOSTNAME:-pi} rebooted ${uptime_s}s ago — ${body}"
   curl -fsS -m 10 --retry 3 --data-raw "REBOOTED ${uptime_s}s ago | ${body}" \
