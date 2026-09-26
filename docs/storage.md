@@ -350,3 +350,43 @@ Router `nextcloud` sengaja tidak memakai `authelia@file`. Klien sync desktop dan
 aplikasi HP berbicara WebDAV, bukan sesi browser, jadi mereka tidak bisa
 mengikuti redirect SSO. Yang menjaganya login
 Nextcloud sendiri; nyalakan 2FA di pengaturannya.
+
+## Status 2026-09-26: disk dilepas, baris fstab dinonaktifkan
+
+HDD dicabut dan barisnya di `/etc/fstab` dikomentari, supaya Pi tidak menunggu
+10 detik tiap boot untuk disk yang tidak ada. Salinan cadangan ada di
+`/etc/fstab.bak`. Untuk memasangnya kembali: hapus tanda `#`, lalu
+`sudo systemctl daemon-reload && sudo mount -a`.
+
+`usb_max_current_enable` juga dikembalikan ke **0** di
+`/boot/firmware/config.txt`. Jangan dinyalakan lagi sebelum catu dayanya
+diganti — lihat di bawah.
+
+### Catu daya: terbukti, bukan lagi dugaan
+
+Percobaan malam itu bersih dan berulang: **tanpa satu pun perangkat USB**,
+dengan keadaan awal stabil (uptime 4 menit, load 0,4–0,7, memori sisa 5,6 GB),
+menyalakan Ollama lalu menjalankan satu perintah Assist membuat Pi reboot dalam
+dua menit. Tiga kali reboot lain terjadi dengan pola yang sama.
+
+Yang menentukan: **tidak ada jejak apa pun di akhir boot** — tidak ada kernel
+panic, tidak ada OOM, tidak ada watchdog, dan `undervoltage` tetap 0. Sistem
+yang crash meninggalkan pesan; sistem yang kehilangan listrik tidak.
+
+Penghitung undervoltage hanya mencatat penurunan yang **lunak**, saat kernel
+masih hidup untuk menulisnya. Yang terjadi di sini runtuhnya terlalu cepat.
+Jadi `undervoltage 0` bukan bukti catu dayanya sehat — pada kegagalan yang
+parah, justru itu yang diharapkan.
+
+Penyebabnya bukan kapasitas rata-rata melainkan **waktu tanggap**: Pi 5 menarik
+~3 W saat diam, dan inferensi LLM melonjakkannya ke 7–8 W dalam milidetik.
+Step-down 12 V→5 V tidak sanggup mengikuti lompatan itu, dan anjlokan beberapa
+milidetik sudah cukup untuk mematikan board.
+
+Karena itu gantinya harus **adaptor resmi Raspberry Pi 27 W (5,1 V / 5 A
+USB-C PD)** — bukan adaptor watt besar merek lain. Yang menentukan keluaran
+5,1 V (bantalan di atas ambang mati) dan tanggapan yang dirancang untuk pola
+arus Pi 5.
+
+Sampai itu terpasang: Ollama mati, HDD tidak dipasang, dan kalau nanti dipasang
+harus punya daya sendiri lewat hub berdaya atau docking.
