@@ -220,3 +220,34 @@ groups:
               expression: A
               conditions:
                 - evaluator: {type: lt, params: [1]}
+
+      # Traefik renews about 30 days ahead, so 14 days left means two renewal
+      # attempts have already failed silently. The usual cause is the
+      # Cloudflare DNS token — expired, rolled, or scoped wrong — and without
+      # this the first sign is a browser warning weeks later.
+      - uid: homelab-cert-expiring
+        title: Certificate expiring
+        condition: B
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: 'TLS certificate for {{ $labels.instance }} expires in under 14 days. Check the Traefik log and CF_DNS_API_TOKEN.'
+        noDataState: OK
+        execErrState: OK
+        data:
+          - refId: A
+            relativeTimeRange: {from: 3600, to: 0}
+            datasourceUid: prometheus
+            model:
+              refId: A
+              instant: true
+              expr: (probe_ssl_earliest_cert_expiry - time()) / 86400
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: {type: lt, params: [14]}

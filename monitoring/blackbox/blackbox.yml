@@ -1,0 +1,17 @@
+# One module, one job: watch when the internal certificates expire.
+#
+# A TCP probe with TLS rather than an HTTP one, because every internal service
+# sits behind Authelia and answers a redirect to the login portal. An HTTP
+# prober would have to be told which status codes count as healthy, and would
+# start failing the day that redirect changes — while telling us nothing more
+# about the certificate, which is all we want here.
+modules:
+  tls_connect:
+    prober: tcp
+    timeout: 5s
+    tcp:
+      tls: true
+      tls_config:
+        # Verify properly. A probe that accepts any certificate would keep
+        # reporting healthy through exactly the failure this exists to catch.
+        insecure_skip_verify: false

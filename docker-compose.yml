@@ -702,3 +702,26 @@ services:
       - OLLAMA_NUM_PARALLEL=1
     volumes:
       - ollama_models:/root/.ollama
+
+  # ==============================================================================
+  # Blackbox exporter — watches when the internal certificates expire
+  # ==============================================================================
+  # Only the lab.<domain> hostnames. The public sites go through Cloudflare,
+  # which owns their certificates and renews them without us; the internal ones
+  # are Traefik's own ACME, and if the Cloudflare DNS token ever breaks, the
+  # first sign would otherwise be a browser warning weeks later.
+  blackbox-exporter:
+    image: prom/blackbox-exporter:v0.28.0
+    container_name: blackbox-exporter
+    restart: unless-stopped
+    profiles:
+      - blackbox
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - monitoring
+      - egress
+    volumes:
+      - ./monitoring/blackbox/blackbox.yml:/etc/blackbox_exporter/config.yml:ro
+    environment:
+      - TZ=${TZ}
