@@ -33,6 +33,14 @@ send() {
     --data-urlencode "text=$1" >/dev/null || true
 }
 
+# Prometheus is not published on the host, so ask it from inside its own
+# container. $2 is a jq expression run against each result element.
+promq() {
+  docker exec prometheus wget -qO- \
+    "http://127.0.0.1:9090/api/v1/query?query=$(printf '%s' "$1" | jq -sRr @uri)" 2>/dev/null |
+    jq -r "[.data.result[] | $2] | join(\", \")" 2>/dev/null
+}
+
 status_report() {
   local up load temp undervolt disk hdd stopped
   up="$(uptime -p 2>/dev/null || echo '?')"
@@ -58,6 +66,21 @@ status_report() {
   stopped="$(docker ps -a --filter label=com.docker.compose.project --filter status=exited --format '{{.Names}}' 2>/dev/null | paste -sd' ' -)"
   [[ -n "$stopped" ]] || stopped="none"
 
+  # Everything below comes from Prometheus and Grafana, which already know the
+  # answers — asking them beats reimplementing the checks here and drifting
+  # out of step with what actually alerts.
+  local down_targets guests firing
+  down_targets="$(promq 'up == 0' '.metric.job + "/" + .metric.instance')"
+  [[ -n "$down_targets" ]] || down_targets="none"
+
+  guests="$(promq 'pve_up == 0' '.metric.id')"
+  [[ -n "$guests" ]] || guests="none"
+
+  firing="$(docker exec grafana wget -qO- \
+    'http://127.0.0.1:3000/api/prometheus/grafana/api/v1/rules' 2>/dev/null |
+    jq -r '[.data.groups[].rules[] | select(.state=="firing") | .name] | join(", ")' 2>/dev/null)"
+  [[ -n "$firing" && "$firing" != "null" ]] || firing="none"
+
   printf '%s\n\n' "📊 ${HOSTNAME:-pi} status"
   printf 'up        : %s\n' "$up"
   printf 'load      : %s\n' "$load"
@@ -66,6 +89,9 @@ status_report() {
   printf 'root disk : %s\n' "$disk"
   printf 'hdd       : %s\n' "$hdd"
   printf 'stopped   : %s\n' "$stopped"
+  printf 'targets   : %s down\n' "$down_targets"
+  printf 'pve guests: %s down\n' "$guests"
+  printf 'alerts    : %s\n' "$firing"
 }
 
 offset=0
