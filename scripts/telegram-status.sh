@@ -160,6 +160,38 @@ lampu_command() {
   roomhub_send "SEND=0,${idx}" && send "💡 Lampu: perintah dikirim"
 }
 
+# Grouped, because a flat list of eleven lines is something you stop reading
+# at line four. Kept in step with scripts/telegram-register-commands.sh, which
+# feeds the same list to Telegram's own "/" menu.
+help_text() {
+  cat <<'EOF'
+🤖 Perintah
+
+— Monitoring —
+/status  Pi: uptime, load, suhu, disk, container, alert
+/pve     Proxmox: node, guest, backup, target scrape
+/kamar   suhu & kelembapan kamar, status AC
+
+— AC kamar —
+/ac on
+/ac off
+/ac 24   set suhu, 16-30
+
+— Lampu meja —
+/lampu            on/off
+/lampu mode
+/lampu terang
+/lampu redup
+/lampu timer10
+/lampu timer30
+
+/help    daftar ini
+
+Perintah AC dan lampu menembakkan IR. Balasannya "perintah dikirim",
+bukan "AC menyala": IR satu arah, alatnya tidak pernah mengonfirmasi.
+EOF
+}
+
 status_report() {
   local up load temp undervolt disk hdd stopped firing
   up="$(uptime -p 2>/dev/null || echo '?')"
@@ -274,12 +306,12 @@ poll_once() {
     # Match on the space or end of string, so /account never reaches /ac.
     /ac|/ac\ *)       ac_command "${text#/ac}" ;;
     /lampu|/lampu\ *) lampu_command "${text#/lampu}" ;;
-    /help*)
-      send "/status — this Pi and its alerts"$'\n'\
-"/pve — Proxmox node, guests and scrape targets"$'\n'\
-"/kamar — suhu, kelembapan, status AC"$'\n'\
-"/ac on|off|24 — kontrol AC"$'\n'\
-"/lampu [mode|terang|redup|timer10|timer30] — lampu meja" ;;
+    # /start is what Telegram sends the first time a chat is opened, so it is
+    # the one command a person is guaranteed to send without being told.
+    /help*|/start*) send "$(help_text)" ;;
+    # Anything else starting with a slash is a typo or a command that no
+    # longer exists. Silence would look like the bot is down.
+    /*) send "Perintah tidak dikenal."$'\n\n'"$(help_text)" ;;
   esac
   done
 }
