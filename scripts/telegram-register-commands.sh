@@ -25,12 +25,12 @@ cd "$REPO_ROOT"
 # Names must be lowercase, 1-32 chars, a-z 0-9 and underscore only.
 read -r -d '' PAYLOAD <<'JSON'
 {"commands":[
-  {"command":"status","description":"Pi: uptime, load, suhu, disk, container, alert"},
-  {"command":"pve","description":"Proxmox: node, guest, backup, target scrape"},
-  {"command":"kamar","description":"Suhu & kelembapan kamar, status AC"},
-  {"command":"ac","description":"Kontrol AC — on | off | 16-30"},
-  {"command":"lampu","description":"Lampu meja — kosong | mode | terang | redup | timer10 | timer30"},
-  {"command":"help","description":"Daftar semua perintah"}
+  {"command":"status","description":"Pi: uptime, load, temperature, disk, containers, alerts"},
+  {"command":"pve","description":"Proxmox: node, guests, backups, scrape targets"},
+  {"command":"room","description":"Bedroom temperature & humidity, AC state"},
+  {"command":"ac","description":"Control the AC - on | off | 16-30"},
+  {"command":"lamp","description":"Desk lamp - empty | mode | bright | dim | timer10 | timer30"},
+  {"command":"help","description":"List every command"}
 ]}
 JSON
 

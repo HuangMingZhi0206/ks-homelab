@@ -88,17 +88,17 @@ FIFO="/var/lib/roomhub/cmd"
 # minute until the Pi ran out of them.
 roomhub_send() {
   if [[ ! -p "$FIFO" ]]; then
-    send "⚠️ Panel kamar tidak aktif. Cek: systemctl status roomhub"
+    send "⚠️ Room panel is not running. Check: systemctl status roomhub"
     return 1
   fi
   if ! timeout 3 sh -c 'printf "%s\n" "$1" > "$2"' _ "$1" "$FIFO"; then
-    send "⚠️ Panel kamar tidak merespons. Cek: journalctl -u roomhub -n 30"
+    send "⚠️ Room panel is not answering. Check: journalctl -u roomhub -n 30"
     return 1
   fi
   return 0
 }
 
-kamar_report() {
+room_report() {
   local t h ac act age
 
   t="$(prom_one 'roomhub_room_temperature_celsius')"
@@ -107,15 +107,15 @@ kamar_report() {
   act="$(prom_one 'roomhub_ac_target_celsius')"
   age="$(prom_one 'time() - roomhub_last_status_timestamp_seconds')"
 
-  printf '%s\n\n' "🛏 Kamar"
-  printf 'suhu      : %s\n' "$(unit "$t" ' C')"
-  printf 'kelembapan: %s\n' "$(unit "$h" '%')"
-  printf 'ac        : %s %s\n' \
+  printf '%s\n\n' "🛏 Bedroom"
+  printf 'temp     : %s\n' "$(unit "$t" ' C')"
+  printf 'humidity : %s\n' "$(unit "$h" '%')"
+  printf 'ac       : %s %s\n' \
     "$([[ "$ac" == "1" ]] && echo ON || { [[ -n "$ac" ]] && echo OFF || echo '?'; })" \
     "${act:+(set $act C)}"
   # The sensor line and the link line are separate on purpose: a missing
   # temperature with a fresh link means the DHT11 failed, not the panel.
-  printf 'lapor     : %s\n' "$([[ -n "$age" ]] && awk -v a="$age" 'BEGIN{printf "%.0f detik lalu", a}' || echo 'tidak ada data')"
+  printf 'reported : %s\n' "$([[ -n "$age" ]] && awk -v a="$age" 'BEGIN{printf "%.0fs ago", a}' || echo 'no data')"
 }
 
 # Commands physically move things in a bedroom, so say what was sent, not what
@@ -126,38 +126,41 @@ ac_command() {
   arg="$(printf '%s' "$1" | tr -d ' ' | tr '[:upper:]' '[:lower:]')"
 
   case "$arg" in
-    on)  roomhub_send 'ACPOWER=ON'  && send "❄️ AC: perintah ON dikirim" ;;
-    off) roomhub_send 'ACPOWER=OFF' && send "❄️ AC: perintah OFF dikirim" ;;
+    on)  roomhub_send 'ACPOWER=ON'  && send "❄️ AC: ON sent" ;;
+    off) roomhub_send 'ACPOWER=OFF' && send "❄️ AC: OFF sent" ;;
     ''|help)
-      send "/ac on — nyalakan"$'\n'"/ac off — matikan"$'\n'"/ac 24 — set suhu 16-30" ;;
+      send "/ac on — turn on"$'\n'"/ac off — turn off"$'\n'"/ac 24 — set temperature, 16-30" ;;
     *)
       if [[ "$arg" =~ ^[0-9]+$ ]] && (( arg >= 16 && arg <= 30 )); then
-        roomhub_send "ACTEMP=${arg}" && send "❄️ AC: suhu ${arg} C dikirim"
+        roomhub_send "ACTEMP=${arg}" && send "❄️ AC: ${arg} C sent"
       else
-        send "Suhu harus 16-30. Contoh: /ac 24"
+        send "Temperature must be 16-30. Example: /ac 24"
       fi ;;
   esac
 }
 
 # Index into menuLampu[] in roomhub.ino. The lamp remote only sends toggles and
 # cannot report anything back, so there is no state to show — only presses.
-lampu_command() {
+# The Indonesian argument names still work. They were the interface for a
+# while, and a command that used to work and now silently does not is worse
+# than a slightly longer case statement.
+lamp_command() {
   local arg idx
   arg="$(printf '%s' "$1" | tr -d ' ' | tr '[:upper:]' '[:lower:]')"
 
   case "$arg" in
     ''|on|off|toggle) idx=0 ;;
     mode)             idx=1 ;;
-    terang)           idx=2 ;;
-    redup)            idx=3 ;;
+    bright|terang)    idx=2 ;;
+    dim|redup)        idx=3 ;;
     timer10)          idx=4 ;;
     timer30)          idx=5 ;;
     *)
-      send "/lampu — on/off"$'\n'"/lampu mode | terang | redup"$'\n'"/lampu timer10 | timer30"
+      send "/lamp — on/off"$'\n'"/lamp mode | bright | dim"$'\n'"/lamp timer10 | timer30"
       return ;;
   esac
 
-  roomhub_send "SEND=0,${idx}" && send "💡 Lampu: perintah dikirim"
+  roomhub_send "SEND=0,${idx}" && send "💡 Lamp: command sent"
 }
 
 # Grouped, because a flat list of eleven lines is something you stop reading
@@ -165,30 +168,30 @@ lampu_command() {
 # feeds the same list to Telegram's own "/" menu.
 help_text() {
   cat <<'EOF'
-🤖 Perintah
+🤖 Commands
 
 — Monitoring —
-/status  Pi: uptime, load, suhu, disk, container, alert
-/pve     Proxmox: node, guest, backup, target scrape
-/kamar   suhu & kelembapan kamar, status AC
+/status  Pi: uptime, load, temperature, disk, containers, alerts
+/pve     Proxmox: node, guests, backups, scrape targets
+/room    bedroom temperature & humidity, AC state
 
-— AC kamar —
+— Bedroom AC —
 /ac on
 /ac off
-/ac 24   set suhu, 16-30
+/ac 24   set temperature, 16-30
 
-— Lampu meja —
-/lampu            on/off
-/lampu mode
-/lampu terang
-/lampu redup
-/lampu timer10
-/lampu timer30
+— Desk lamp —
+/lamp            on/off
+/lamp mode
+/lamp bright
+/lamp dim
+/lamp timer10
+/lamp timer30
 
-/help    daftar ini
+/help    this list
 
-Perintah AC dan lampu menembakkan IR. Balasannya "perintah dikirim",
-bukan "AC menyala": IR satu arah, alatnya tidak pernah mengonfirmasi.
+AC and lamp commands fire IR. The reply says "sent", not "AC is on":
+IR is one way and the unit never confirms.
 EOF
 }
 
@@ -302,16 +305,20 @@ poll_once() {
   case "$text" in
     /status*) send "$(status_report)" ;;
     /pve*)    send "$(pve_report)" ;;
-    /kamar*)  send "$(kamar_report)" ;;
+    # The Indonesian names stay as aliases: they are in the chat history and
+    # in muscle memory, and a command that quietly stopped working would be
+    # read as the bot breaking.
+    /room*|/kamar*) send "$(room_report)" ;;
     # Match on the space or end of string, so /account never reaches /ac.
     /ac|/ac\ *)       ac_command "${text#/ac}" ;;
-    /lampu|/lampu\ *) lampu_command "${text#/lampu}" ;;
+    /lamp|/lamp\ *)   lamp_command "${text#/lamp}" ;;
+    /lampu|/lampu\ *) lamp_command "${text#/lampu}" ;;
     # /start is what Telegram sends the first time a chat is opened, so it is
     # the one command a person is guaranteed to send without being told.
     /help*|/start*) send "$(help_text)" ;;
     # Anything else starting with a slash is a typo or a command that no
     # longer exists. Silence would look like the bot is down.
-    /*) send "Perintah tidak dikenal."$'\n\n'"$(help_text)" ;;
+    /*) send "Unknown command."$'\n\n'"$(help_text)" ;;
   esac
   done
 }

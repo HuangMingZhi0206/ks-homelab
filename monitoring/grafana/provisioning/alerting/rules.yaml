@@ -270,7 +270,7 @@ groups:
         labels:
           severity: warning
         annotations:
-          summary: 'Panel kamar tidak melapor sejak {{ humanizeDuration $values.A.Value }} lalu. Cek: journalctl -u roomhub -n 50'
+          summary: 'Room panel has not reported for {{ humanizeDuration $values.A.Value }}. Check: journalctl -u roomhub -n 50'
         noDataState: Alerting
         execErrState: OK
         data:
@@ -307,7 +307,7 @@ groups:
         labels:
           severity: warning
         annotations:
-          summary: 'DHT11 di kamar tidak terbaca, padahal panelnya hidup. Biasanya kabel data di D2 longgar.'
+          summary: 'DHT11 in the bedroom is not reading, although the panel is alive. Usually the data wire on D2 has worked loose.'
         noDataState: OK
         execErrState: OK
         data:

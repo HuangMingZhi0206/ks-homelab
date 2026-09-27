@@ -159,9 +159,14 @@ kadang hilang — jenis kerusakan yang paling lama dicari.
 |---|---|
 | `/status` | uptime, load, suhu CPU, undervolt, disk, container mati, alert aktif |
 | `/pve` | node Proxmox, guest hidup/mati, guest tanpa backup, target gagal scrape |
-| `/kamar` | suhu, kelembapan, status AC, umur laporan terakhir |
+| `/room` | suhu, kelembapan, status AC, umur laporan terakhir |
 | `/ac on\|off\|24` | kontrol AC lewat panel kamar |
-| `/lampu [mode\|terang\|redup\|timer10\|timer30]` | lampu meja |
+| `/lamp [mode\|bright\|dim\|timer10\|timer30]` | lampu meja |
+
+Teks balasan bot-nya berbahasa Inggris — itu permintaan Kevin, terpisah dari
+dokumen ini. Nama lama `/kamar` dan `/lampu` (berikut `terang` dan `redup`)
+tetap diterima sebagai alias, hanya tidak lagi muncul di menu `/`: perintah
+yang dulu jalan lalu diam-diam berhenti akan terbaca sebagai bot yang rusak.
 
 Dua perintah terakhir menggerakkan benda nyata, jadi balasannya berbunyi
 "perintah dikirim", bukan "AC menyala". IR itu satu arah: AC tidak pernah
