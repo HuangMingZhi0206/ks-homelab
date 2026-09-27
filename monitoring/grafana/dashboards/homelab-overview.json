@@ -100,15 +100,15 @@
     {
       "id": 7,
       "type": "timeseries",
-      "title": "Kamar — Suhu & Kelembapan (DHT11)",
-      "description": "Dari Arduino di kamar, lewat roomhub/hub_kamar.py dan textfile collector node-exporter. Garis putus saat sensor gagal dibaca: itu disengaja, 0 °C lebih menyesatkan daripada lubang.",
+      "title": "Bedroom Temperature & Humidity (DHT11)",
+      "description": "From the Arduino in the bedroom, via roomhub/hub_kamar.py and the node-exporter textfile collector. The line breaks when the sensor fails to read, on purpose: 0 °C is more misleading than a gap.",
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "fieldConfig": {
         "defaults": { "unit": "celsius" },
         "overrides": [
           {
-            "matcher": { "id": "byName", "options": "Kelembapan" },
+            "matcher": { "id": "byName", "options": "Humidity" },
             "properties": [
               { "id": "unit", "value": "humidity" },
               { "id": "custom.axisPlacement", "value": "right" }
@@ -117,15 +117,15 @@
         ]
       },
       "targets": [
-        { "refId": "A", "expr": "roomhub_room_temperature_celsius", "legendFormat": "Suhu" },
-        { "refId": "B", "expr": "roomhub_room_humidity_percent", "legendFormat": "Kelembapan" }
+        { "refId": "A", "expr": "roomhub_room_temperature_celsius", "legendFormat": "Temperature" },
+        { "refId": "B", "expr": "roomhub_room_humidity_percent", "legendFormat": "Humidity" }
       ]
     },
     {
       "id": 8,
       "type": "stat",
-      "title": "AC Kamar — menurut Arduino",
-      "description": "Bukan kondisi AC sebenarnya. IR satu arah, jadi ini yang terakhir diperintahkan dari panel. Pakai remote asli dan angka ini tertinggal sampai perintah berikutnya.",
+      "title": "Bedroom AC — as the Arduino believes it",
+      "description": "Not the state of the AC itself. IR is one way, so this is the last thing commanded from the panel. Use the original remote and these values stay behind until the next command from here.",
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "fieldConfig": {
