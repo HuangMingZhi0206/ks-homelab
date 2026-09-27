@@ -140,10 +140,20 @@ untuk tidak jadi kebisingan.
 
 ## Bertanya balik, dan menyuruh
 
-Alert itu satu arah. `scripts/telegram-status.sh` membalikkannya: dijalankan
-cron tiap menit, membaca `getUpdates`, dan hanya melayani `TELEGRAM_CHAT_ID`.
-Orang lain yang menemukan bot-nya dapat kesunyian — nama bot bisa dicari,
-chat id tidak.
+Alert itu satu arah. `scripts/telegram-status.sh` membalikkannya, dan hanya
+melayani `TELEGRAM_CHAT_ID`. Orang lain yang menemukan bot-nya dapat
+kesunyian — nama bot bisa dicari, chat id tidak.
+
+Jalannya sebagai service (`scripts/telegram-bot.service`), bukan cron. Versi
+cron-nya dipanggil tiap menit dan bertanya dengan `timeout=0`: sekali lihat,
+lalu keluar. Artinya perintahmu menunggu rata-rata 30 detik sebelum ada yang
+melihatnya, dan rasanya seperti bot yang rusak. Sekarang satu permintaan
+digantung terbuka (long polling, 25 detik) sehingga balasan datang secepat
+jawabannya bisa disusun.
+
+Saat memasang service-nya, **hapus entri cron-nya**. Dua poller pada satu bot
+akan saling mencuri pesan, dan gejalanya adalah perintah yang kadang jalan
+kadang hilang — jenis kerusakan yang paling lama dicari.
 
 | Perintah | Isi |
 |---|---|

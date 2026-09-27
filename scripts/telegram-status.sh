@@ -1,9 +1,16 @@
 #!/usr/bin/env bash
 #
-# Answer /status and /pve in Telegram.
+# Answer commands in Telegram: /status /pve /kamar /ac /lampu.
 #
-# Run from cron every minute:
-#   * * * * * /opt/homelab/scripts/telegram-status.sh
+# Runs as a service, not from cron:
+#   sudo cp scripts/telegram-bot.service /etc/systemd/system/
+#   sudo systemctl enable --now telegram-bot
+#
+# It used to be a cron job firing every minute, which meant a command waited
+# 30 seconds on average before anything even looked for it. Long polling holds
+# one request open instead, so the reply comes back as fast as it can be built.
+# Remove the cron entry when you install the service: two pollers on one bot
+# steal each other's messages.
 #
 # Reuses TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID from .env — the same bot
 # Grafana and heartbeat.sh already send through.
@@ -218,23 +225,36 @@ pve_report() {
   printf 'targets   : %s down\n' "$targets"
 }
 
-offset=0
-[[ -r "$STATE" ]] && offset="$(cat "$STATE")"
+# Long polling: Telegram holds the request open until a message arrives or
+# POLL_TIMEOUT expires, so a command is answered in about the time it takes to
+# run it. Asking with timeout=0 from cron instead meant waiting for the next
+# minute boundary — 30 seconds on average, and it felt broken.
+#
+# curl's own -m must exceed POLL_TIMEOUT, or curl gives up on a request that is
+# working exactly as intended.
+POLL_TIMEOUT="${POLL_TIMEOUT:-25}"
 
-# No allowed_updates filter: its value needs quotes, and an unencoded quote in
-# the URL makes curl refuse the request outright — silently, because stderr is
-# discarded here. The jq select below does the same filtering anyway.
-updates="$(curl -fsS -m 20 "${API}/getUpdates?offset=${offset}&timeout=0" 2>/dev/null)" || exit 0
-echo "$updates" | jq -e '.ok' >/dev/null 2>&1 || exit 0
+poll_once() {
+  local offset updates last
 
-# Advance the offset even for messages we ignore, or an unrelated message sits
-# at the head of the queue forever and every later command is never seen.
-last="$(echo "$updates" | jq -r '[.result[].update_id] | max // empty')"
-[[ -n "$last" ]] && echo $((last + 1)) > "$STATE"
+  offset=0
+  [[ -r "$STATE" ]] && offset="$(cat "$STATE")"
 
-echo "$updates" | jq -r --arg chat "$TELEGRAM_CHAT_ID" \
-  '.result[] | select(.message.chat.id | tostring == $chat) | .message.text // empty' 2>/dev/null |
-while read -r text; do
+  # No allowed_updates filter: its value needs quotes, and an unencoded quote
+  # in the URL makes curl refuse the request outright — silently, because
+  # stderr is discarded here. The jq select below does the same filtering.
+  updates="$(curl -fsS -m $((POLL_TIMEOUT + 15)) \
+    "${API}/getUpdates?offset=${offset}&timeout=${POLL_TIMEOUT}" 2>/dev/null)" || return 1
+  echo "$updates" | jq -e '.ok' >/dev/null 2>&1 || return 1
+
+  # Advance the offset even for messages we ignore, or an unrelated message
+  # sits at the head of the queue forever and every later command is unseen.
+  last="$(echo "$updates" | jq -r '[.result[].update_id] | max // empty')"
+  [[ -n "$last" ]] && echo $((last + 1)) > "$STATE"
+
+  echo "$updates" | jq -r --arg chat "$TELEGRAM_CHAT_ID" \
+    '.result[] | select(.message.chat.id | tostring == $chat) | .message.text // empty' 2>/dev/null |
+  while read -r text; do
   case "$text" in
     /status*) send "$(status_report)" ;;
     /pve*)    send "$(pve_report)" ;;
@@ -249,4 +269,20 @@ while read -r text; do
 "/ac on|off|24 — kontrol AC"$'\n'\
 "/lampu [mode|terang|redup|timer10|timer30] — lampu meja" ;;
   esac
+  done
+}
+
+# --once for testing and for a cron fallback. Otherwise loop forever under
+# systemd (scripts/telegram-bot.service).
+if [[ "${1:-}" == "--once" ]]; then
+  poll_once || exit 0
+  exit 0
+fi
+
+while true; do
+  # A failed poll is usually the internet being briefly absent, which on a
+  # home connection is not an event. Pause before retrying so an outage does
+  # not turn into a request flood; a successful poll already blocked for up to
+  # POLL_TIMEOUT, so it needs no pause of its own.
+  poll_once || sleep 5
 done

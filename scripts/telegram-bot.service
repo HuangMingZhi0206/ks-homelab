@@ -1,0 +1,35 @@
+[Unit]
+Description=Telegram bot — answers /status, /pve, /kamar, /ac, /lampu
+# Needs the network to reach api.telegram.org, and Docker because most of the
+# answers come from Prometheus and Grafana inside containers.
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+# ubuntu is already in the docker group and owns the room panel FIFO, which is
+# all the access this needs.
+User=ubuntu
+WorkingDirectory=/opt/homelab
+ExecStart=/opt/homelab/scripts/telegram-status.sh
+Restart=always
+RestartSec=10
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+# The polling offset file lives in $HOME, which ProtectHome hides. Point HOME
+# at a state directory instead.
+#
+# Copy the old offset across when you first install this, or the bot starts
+# from whatever Telegram still has queued — up to 24 hours of messages — and
+# replays them. With /ac and /lampu in the command list, that is not merely
+# noisy: it would fire IR from a message you sent yesterday.
+#   sudo install -o ubuntu -g ubuntu ~/.telegram-status-offset \
+#        /var/lib/telegram-bot/.telegram-status-offset
+Environment=HOME=/var/lib/telegram-bot
+StateDirectory=telegram-bot
+
+[Install]
+WantedBy=multi-user.target
