@@ -141,6 +141,11 @@ class Hub:
             FIFO.parent.mkdir(parents=True, exist_ok=True)
             if not FIFO.exists():
                 os.mkfifo(FIFO, 0o660)
+            # mkfifo's mode is masked by the umask, which under systemd is 022
+            # — so the group-write bit asked for above is dropped and the
+            # group can read the FIFO but not write to it. chmod is not
+            # masked. Without this, only root can send a command.
+            os.chmod(FIFO, 0o660)
             self.fifo_fd = os.open(FIFO, os.O_RDWR | os.O_NONBLOCK)
             log.info("command fifo at %s", FIFO)
         except OSError as e:
