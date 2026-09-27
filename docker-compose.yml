@@ -250,10 +250,15 @@ services:
       - '--path.sysfs=/host/sys'
       - '--path.rootfs=/rootfs'
       - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+      # Serves any .prom file dropped in this directory. roomhub/hub_kamar.py
+      # writes room temperature and humidity there — the Arduino has no network
+      # of its own, so the Pi publishes on its behalf.
+      - '--collector.textfile.directory=/var/lib/node_exporter/textfile'
     volumes:
       - /proc:/host/proc:ro
       - /sys:/host/sys:ro
       - /:/rootfs:ro
+      - ./monitoring/textfile:/var/lib/node_exporter/textfile:ro
 
   cadvisor:
     image: gcr.io/cadvisor/cadvisor:v0.55.1

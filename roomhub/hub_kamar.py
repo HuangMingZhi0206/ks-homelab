@@ -1,9 +1,17 @@
 #!/usr/bin/env python3
-"""Room hub — Raspberry Pi side.
+"""Room hub — Raspberry Pi side, for the SMART ROOM sketch on the Arduino.
 
-Listens to the Arduino on USB serial, turns button presses into actions, and
-writes the result back to the LCD so the person standing at the panel sees
-whether it worked.
+The Arduino owns the panel: it reads its own buttons, draws its own screen and
+sends the IR. It is not a dumb terminal, so this daemon does not drive it. It
+does the three things the Arduino cannot do for itself:
+
+  1. Tell it what time it is. An Uno has no clock. It counts millis() from
+     whenever it last booted, and it boots blank every time this port is
+     opened, so without us the screen shows --:--:-- forever.
+  2. Publish the DHT11 readings as Prometheus metrics, so room temperature
+     lands in Grafana next to everything else.
+  3. Accept commands from the rest of the house — Telegram, Home Assistant,
+     a cron job — and pass them to the board.
 
 Run it under systemd (see roomhub.service). It is written to survive the
 Arduino being unplugged, reset, or re-enumerated on a different port.
@@ -11,11 +19,13 @@ Arduino being unplugged, reset, or re-enumerated on a different port.
 
 from __future__ import annotations
 
+import errno
 import logging
-import subprocess
+import os
+import re
+import select
 import time
 from pathlib import Path
-from typing import Callable
 
 import serial
 from serial.tools import list_ports
@@ -26,7 +36,35 @@ from serial.tools import list_ports
 # and fall back to the fixed path.
 CH340_VID_PID = (0x1A86, 0x7523)
 FALLBACK_PORT = "/dev/ttyUSB0"
-BAUD = 115200
+
+# Must match Serial.begin() in roomhub.ino. There is no negotiation on a
+# serial line: if the two ends disagree, every byte arrives as plausible
+# garbage and nothing reports an error.
+BAUD = 9600
+
+# The sketch keeps time with millis(), clocked by whatever oscillator the
+# clone was built with. A ceramic resonator drifts on the order of minutes per
+# day, so resend the time regularly rather than only at boot.
+RESYNC_EVERY = 30 * 60
+
+# node-exporter reads every .prom file in this directory on each scrape and
+# serves whatever it finds. It also publishes node_textfile_mtime_seconds, so
+# a stale file is visible as stale instead of quietly reporting old numbers.
+TEXTFILE = Path(
+    os.environ.get("ROOMHUB_TEXTFILE", "/opt/homelab/monitoring/textfile/roomhub.prom")
+)
+
+# Commands arrive here as lines. A FIFO rather than a socket: no port, no
+# listener to secure, and file permissions are the whole access control story.
+#   echo 'ACPOWER=OFF' > /run/roomhub/cmd
+FIFO = Path(os.environ.get("ROOMHUB_FIFO", "/run/roomhub/cmd"))
+
+# Only these reach the board. The sketch ignores anything it does not
+# recognise, but a whitelist keeps a typo in a cron job from becoming a
+# mystery, and the ranges here are the same ones the sketch enforces.
+ALLOWED = re.compile(
+    r"^(SEND=[0-1],\d{1,2}|ACTEMP=(1[6-9]|2\d|30)|ACPOWER=(ON|OFF)|PING|TIME)$"
+)
 
 log = logging.getLogger("roomhub")
 
@@ -38,110 +76,69 @@ def find_port() -> str:
     return FALLBACK_PORT
 
 
-# --- actions -----------------------------------------------------------------
-#
-# Each returns the two LCD rows to show. Keep them short: the screen is 16
-# characters wide and anything longer is silently cut off.
-#
-# These are deliberately small and safe. Replace the bodies with what you
-# actually want the panel to do.
+def parse_status(line: str) -> dict[str, str]:
+    """STATUS;T=27.5;H=60;JAM=12:34:56;AC=ON;ACT=25;ACF=a -> dict.
 
-
-def run(cmd: list[str], timeout: int = 20) -> bool:
-    """Run a command, log its failure, and never raise.
-
-    A daemon that dies because one action failed is worse than an action that
-    quietly did nothing: the panel stops responding entirely.
+    JAM contains colons, so split each field on the first '=' only.
     """
+    out: dict[str, str] = {}
+    for field in line.split(";")[1:]:
+        key, sep, value = field.partition("=")
+        if sep:
+            out[key] = value
+    return out
+
+
+def as_float(value: str | None) -> float | None:
+    """The sketch prints NA when the DHT11 read failed. That is not zero, and
+    writing zero would put a believable wrong number on the graph."""
+    if value is None or value == "NA":
+        return None
     try:
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
-        if r.returncode:
-            log.warning("%s exited %d: %s", cmd[0], r.returncode, r.stderr.strip()[:200])
-        return r.returncode == 0
-    except (subprocess.TimeoutExpired, FileNotFoundError, OSError) as e:
-        log.warning("%s failed: %s", cmd[0], e)
-        return False
-
-
-def action_status(_: "Hub") -> tuple[str, str]:
-    """Temperature and load — the two numbers worth a glance in passing."""
-    try:
-        milli = Path("/sys/class/thermal/thermal_zone0/temp").read_text().strip()
-        temp = f"{int(milli) / 1000:.1f}C"
-    except (OSError, ValueError):
-        temp = "?"
-    load = Path("/proc/loadavg").read_text().split()[0]
-    return ("Homelab", f"{temp}  load {load}")
-
-
-def action_disk(_: "Hub") -> tuple[str, str]:
-    try:
-        out = subprocess.run(
-            ["df", "-h", "--output=avail,pcent", "/"],
-            capture_output=True, text=True, timeout=5,
-        ).stdout.split("\n")[1].split()
-        return ("Disk /", f"{out[0]} free {out[1]}")
-    except Exception:  # noqa: BLE001 - the panel should never crash on df
-        return ("Disk /", "unavailable")
-
-
-def action_restart_service(hub: "Hub") -> tuple[str, str]:
-    """DUMMY: restart one container. Point this at whatever you actually fix
-    from the panel — and keep it to one named service, never a blanket restart:
-    a wrong press should cost you one container, not the stack."""
-    hub.lcd("Restarting", "homepage...")
-    ok = run(["docker", "restart", "homepage"], timeout=60)
-    return ("Restart", "done" if ok else "FAILED")
-
-
-def action_backlight(hub: "Hub") -> tuple[str, str] | None:
-    """The panel lives in a bedroom; being able to kill the glare matters."""
-    hub.backlight = not hub.backlight
-    hub.send(f"BL:{1 if hub.backlight else 0}")
-    return None  # nothing to say on screen, the screen just changed
-
-
-def action_ask_ai(hub: "Hub") -> tuple[str, str]:
-    """DUMMY: a placeholder for calling a local model.
-
-    Left unwired on purpose — Ollama is stopped on this Pi because inference
-    pulls the supply down hard enough to reboot the board. See docs/storage.
-    """
-    return ("AI", "disabled")
-
-
-ACTIONS: dict[str, Callable[["Hub"], tuple[str, str] | None]] = {
-    "SELECT": action_status,
-    "UP": action_disk,
-    "DOWN": action_restart_service,
-    "LEFT": action_backlight,
-    "RIGHT": action_ask_ai,
-}
-
-
-# --- hub ---------------------------------------------------------------------
+        return float(value)
+    except ValueError:
+        return None
 
 
 class Hub:
     def __init__(self) -> None:
         self.ser: serial.Serial | None = None
-        self.backlight = True
+        self.fifo_fd: int | None = None
+        self.rx = bytearray()
+        self.last_sync = 0.0
+        self.status: dict[str, str] = {}
+        self.last_status = 0.0
 
     # -- link ----------------------------------------------------------------
 
     def connect(self) -> None:
-        """Open the port, waiting for the board to finish resetting.
+        """Open the port. Opening it toggles DTR, which resets the board.
 
-        Opening a serial port toggles DTR, which resets the Arduino. Anything
-        sent in the first couple of seconds lands in a bootloader that is not
-        listening, so wait, then throw away whatever noise arrived.
+        Do not sleep through the reset: the sketch says READY;SMARTROOM when
+        it has finished booting, which is both more reliable than a guessed
+        delay and the signal that the clock now needs setting.
         """
         port = find_port()
-        self.ser = serial.Serial(port, BAUD, timeout=1)
-        time.sleep(2.0)
-        self.ser.reset_input_buffer()
-        log.info("connected to %s at %d baud", port, BAUD)
-        self.lcd("Homelab", "hub connected")
+        self.ser = serial.Serial(port, BAUD, timeout=0)
+        self.rx.clear()
+        log.info("opened %s at %d baud, waiting for the board to boot", port, BAUD)
+
+    def open_fifo(self) -> None:
+        """Open read-write, which looks wrong and is deliberate.
+
+        A FIFO opened read-only reports EOF the moment the last writer closes,
+        and select() then marks it readable forever. Holding a writer open
+        ourselves means it simply stays empty until someone writes a line.
+        """
+        try:
+            FIFO.parent.mkdir(parents=True, exist_ok=True)
+            if not FIFO.exists():
+                os.mkfifo(FIFO, 0o660)
+            self.fifo_fd = os.open(FIFO, os.O_RDWR | os.O_NONBLOCK)
+            log.info("command fifo at %s", FIFO)
+        except OSError as e:
+            log.warning("no command fifo (%s); the panel still works", e)
+            self.fifo_fd = None
 
     def send(self, line: str) -> None:
         if not self.ser:
@@ -151,57 +148,181 @@ class Hub:
         except serial.SerialException as e:
             log.warning("write failed: %s", e)
 
-    def lcd(self, top: str, bottom: str = "") -> None:
-        self.send(f"LCD:{top[:16]}|{bottom[:16]}")
+    def sync_time(self) -> None:
+        self.send(time.strftime("TIME=%H:%M:%S"))
+        self.last_sync = time.monotonic()
 
     # -- dispatch ------------------------------------------------------------
 
     def handle(self, line: str) -> None:
-        if line.startswith("HELLO:"):
-            log.info("board announced itself: %s", line[6:])
-            self.lcd("Homelab", "hub connected")
-            return
+        if line.startswith("READY"):
+            log.info("board booted: %s", line)
+            self.sync_time()
+        elif line.startswith("STATUS;"):
+            self.status = parse_status(line)
+            self.last_status = time.time()
+            self.write_metrics()
+        elif line.startswith("IR;"):
+            # Someone pressed a button at the panel and IR went out. Worth a
+            # log line: it is the only record that the room was touched.
+            log.info("%s", line)
+        elif line.startswith("ACK") or line == "PONG":
+            log.debug("%s", line)
+        else:
+            log.debug("unhandled: %s", line)
 
-        if not line.startswith("BTN:"):
-            log.debug("ignored: %s", line)
+    def command(self, raw: str) -> None:
+        cmd = raw.strip().upper()
+        if not cmd:
             return
-
-        name = line[4:].strip().upper()
-        action = ACTIONS.get(name)
-        if action is None:
-            log.info("button %s has no action", name)
+        if not ALLOWED.match(cmd):
+            log.warning("rejected command: %s", raw.strip()[:40])
             return
+        if cmd == "TIME":
+            self.sync_time()
+            return
+        log.info("command: %s", cmd)
+        self.send(cmd)
 
-        log.info("button %s", name)
+    # -- metrics -------------------------------------------------------------
+
+    def write_metrics(self) -> None:
+        s = self.status
+        temp = as_float(s.get("T"))
+        hum = as_float(s.get("H"))
+
+        lines = [
+            "# HELP roomhub_up Arduino room panel is answering on serial.",
+            "# TYPE roomhub_up gauge",
+            "roomhub_up 1",
+            "# HELP roomhub_last_status_timestamp_seconds Last STATUS line received.",
+            "# TYPE roomhub_last_status_timestamp_seconds gauge",
+            f"roomhub_last_status_timestamp_seconds {self.last_status:.0f}",
+        ]
+
+        # Omit rather than zero when the sensor failed: a gap in the graph is
+        # honest, a 0 C bedroom is not.
+        if temp is not None:
+            lines += [
+                "# HELP roomhub_room_temperature_celsius DHT11 room temperature.",
+                "# TYPE roomhub_room_temperature_celsius gauge",
+                f"roomhub_room_temperature_celsius {temp}",
+            ]
+        if hum is not None:
+            lines += [
+                "# HELP roomhub_room_humidity_percent DHT11 relative humidity.",
+                "# TYPE roomhub_room_humidity_percent gauge",
+                f"roomhub_room_humidity_percent {hum}",
+            ]
+
+        # What the Arduino believes about the AC, which is not the same as what
+        # the AC is doing — a one-way IR link cannot know. If the original
+        # remote was used, this is wrong until the next command from here.
+        if "AC" in s:
+            lines += [
+                "# HELP roomhub_ac_power AC power as last commanded from the panel.",
+                "# TYPE roomhub_ac_power gauge",
+                f"roomhub_ac_power {1 if s['AC'] == 'ON' else 0}",
+            ]
+        target = as_float(s.get("ACT"))
+        if target is not None:
+            lines += [
+                "# HELP roomhub_ac_target_celsius AC setpoint as last commanded.",
+                "# TYPE roomhub_ac_target_celsius gauge",
+                f"roomhub_ac_target_celsius {target}",
+            ]
+
+        lines += [
+            "# HELP roomhub_clock_synced Arduino clock has been set since it booted.",
+            "# TYPE roomhub_clock_synced gauge",
+            f"roomhub_clock_synced {0 if s.get('JAM', 'NA') == 'NA' else 1}",
+            "",
+        ]
+
+        # Write and rename: node-exporter may read this file at any moment, and
+        # a partial write would be served as a truncated metrics page.
         try:
-            result = action(self)
-        except Exception:  # noqa: BLE001 - one bad action must not end the daemon
-            log.exception("action for %s raised", name)
-            self.lcd("Error", name.lower())
-            return
+            TEXTFILE.parent.mkdir(parents=True, exist_ok=True)
+            tmp = TEXTFILE.with_suffix(".prom.tmp")
+            tmp.write_text("\n".join(lines))
+            os.replace(tmp, TEXTFILE)
+        except OSError as e:
+            log.warning("cannot write %s: %s", TEXTFILE, e)
 
-        if result:
-            self.lcd(*result)
+    def drop_metrics(self) -> None:
+        """The board is gone. Say so, rather than leaving the last reading in
+        place looking current."""
+        try:
+            TEXTFILE.write_text(
+                "# HELP roomhub_up Arduino room panel is answering on serial.\n"
+                "# TYPE roomhub_up gauge\nroomhub_up 0\n"
+            )
+        except OSError:
+            pass
 
     # -- loop ----------------------------------------------------------------
 
+    def pump_serial(self) -> None:
+        assert self.ser is not None
+        data = self.ser.read(4096)
+        if not data:
+            return
+        self.rx.extend(data)
+        while b"\n" in self.rx:
+            raw, _, rest = self.rx.partition(b"\n")
+            self.rx = bytearray(rest)
+            line = raw.decode("utf-8", "replace").strip()
+            if line:
+                self.handle(line)
+        # A sender stuck mid-line must not grow this without limit.
+        if len(self.rx) > 4096:
+            self.rx.clear()
+
+    def pump_fifo(self) -> None:
+        assert self.fifo_fd is not None
+        try:
+            data = os.read(self.fifo_fd, 4096)
+        except OSError as e:
+            if e.errno in (errno.EAGAIN, errno.EWOULDBLOCK):
+                return
+            raise
+        for line in data.decode("utf-8", "replace").splitlines():
+            self.command(line)
+
     def run_forever(self) -> None:
+        self.open_fifo()
         while True:
             try:
                 if self.ser is None:
                     self.connect()
 
-                # readline() blocks inside the kernel until a line arrives or
-                # the 1s timeout expires. That is what keeps this at roughly
-                # zero CPU — a polling loop with sleep() would wake constantly
-                # and still add latency to every press.
-                raw = self.ser.readline()  # type: ignore[union-attr]
-                if not raw:
-                    continue
+                fds = [self.ser.fileno()]  # type: ignore[union-attr]
+                if self.fifo_fd is not None:
+                    fds.append(self.fifo_fd)
 
-                line = raw.decode("utf-8", "replace").strip()
-                if line:
-                    self.handle(line)
+                # select() sleeps in the kernel until something arrives. That
+                # is what keeps this at roughly zero CPU while still reacting
+                # to a command the instant it is written — a poll-and-sleep
+                # loop would cost both idle wakeups and latency.
+                ready, _, _ = select.select(fds, [], [], 5.0)
+
+                for fd in ready:
+                    if fd == self.fifo_fd:
+                        self.pump_fifo()
+                    else:
+                        self.pump_serial()
+
+                if time.monotonic() - self.last_sync > RESYNC_EVERY:
+                    self.sync_time()
+
+                # The sketch reports every 5 s, but only while it is showing
+                # the home screen: reporting mid-menu would interrupt IR
+                # timing. Standing in a menu is therefore not a fault, and
+                # three minutes of silence is.
+                if self.last_status and time.time() - self.last_status > 180:
+                    log.warning("no STATUS for 3 minutes, pinging")
+                    self.send("PING")
+                    self.last_status = time.time()
 
             except (serial.SerialException, OSError) as e:
                 # Unplugged, reset, or renumbered. Drop the handle and retry —
@@ -214,14 +335,12 @@ class Hub:
                 except Exception:  # noqa: BLE001
                     pass
                 self.ser = None
+                self.drop_metrics()
                 time.sleep(3)
 
 
 def main() -> None:
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(levelname)s %(message)s",
-    )
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     try:
         Hub().run_forever()
     except KeyboardInterrupt:

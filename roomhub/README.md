@@ -1,46 +1,95 @@
 # Room hub
 
-An Arduino with an LCD Keypad Shield, wired to the Pi over USB, as a physical
-panel for the homelab: five buttons in, two rows of text back.
+An Arduino Uno with an LCD Keypad Shield, an IR LED and a DHT11, wired to the
+Pi over USB. It is a standalone remote control for the desk lamp and the
+Panasonic AC, and the Pi is bolted on beside it — not in charge of it.
 
 ```
-roomhub.ino        sketch for the Arduino
+roomhub.ino        sketch for the Arduino (SMART ROOM IR REMOTE v10)
 hub_kamar.py       daemon on the Pi
 roomhub.service    systemd unit for the daemon
 ```
 
+## Who owns what
+
+The Arduino reads its own buttons, draws its own screen, holds the AC state
+and sends the IR. Unplug the Pi and the panel still works; that is the point
+of a wall control.
+
+The Pi adds the three things the board cannot do alone:
+
+- **The clock.** An Uno has no real-time clock. It counts `millis()` from its
+  last boot, so without a `TIME=` line the screen reads `--:--:--` forever.
+  Opening the serial port resets the board, so this happens on every connect.
+- **Metrics.** The DHT11 readings become Prometheus metrics, so bedroom
+  temperature sits in Grafana next to CPU and disk.
+- **Remote commands.** Telegram, Home Assistant or cron can turn the AC on
+  from outside the room.
+
 ## Protocol
 
-Line-based, newline-terminated, in both directions:
+Line-based, newline-terminated, 9600 baud.
 
 | Direction | Message | Meaning |
 |---|---|---|
-| Arduino → Pi | `HELLO:roomhub` | board booted, link is live |
-| Arduino → Pi | `BTN:SELECT` | a button was pressed |
-| Pi → Arduino | `LCD:Homelab\|47.2 C` | write two rows, `\|` splits them |
-| Pi → Arduino | `BL:0` | backlight off |
+| Arduino → Pi | `READY;SMARTROOM` | booted; the clock is unset |
+| Arduino → Pi | `STATUS;T=27.5;H=60;JAM=12:34:56;AC=ON;ACT=25;ACF=a` | every 5 s, home screen only |
+| Arduino → Pi | `IR;KAT=AC KAMAR;CMD=Suhu  +` | someone pressed a button and IR went out |
+| Arduino → Pi | `ACK;TIME`, `PONG` | acknowledgements |
+| Pi → Arduino | `TIME=12:34:56` | set the clock |
+| Pi → Arduino | `SEND=0,3` | run a menu entry: `0`=lamp, `1`=AC |
+| Pi → Arduino | `ACTEMP=24` | AC setpoint, 16–30 |
+| Pi → Arduino | `ACPOWER=ON` / `OFF` | AC power |
 
-Text, not binary, on purpose: you can debug the whole thing with a serial
-monitor and read what is happening.
+**9600, not 115200.** There is no negotiation on a serial line. If the two
+ends disagree, every byte still arrives — as plausible garbage — and nothing
+reports an error. The daemon matches the `Serial.begin()` in the sketch, so
+changing one means changing the other.
+
+`STATUS` is only sent while the home screen is showing. Reporting from inside
+a menu would collide with IR transmission, whose timing is measured in
+microseconds. So metrics pausing while you stand at the panel is normal; the
+daemon waits three minutes before it treats silence as a fault.
+
+## Sending commands
+
+```bash
+echo 'ACPOWER=OFF' > /run/roomhub/cmd
+echo 'SEND=0,0'    > /run/roomhub/cmd     # lamp on/off
+```
+
+A FIFO rather than a socket: no port, no listener to secure, and the file
+permissions are the whole access-control story. The daemon whitelists the four
+command forms above, so a typo in a cron job fails loudly in the journal
+instead of becoming a mystery.
+
+## What the AC metrics actually mean
+
+`roomhub_ac_power` and `roomhub_ac_target_celsius` are what the **Arduino
+believes**, not what the AC is doing. IR is one-way: there is no channel for
+the unit to answer. Use the original remote and the board is out of date until
+the next command from the panel. Any AC command resyncs it, because the whole
+state is sent in one frame.
 
 ## The board is a CH340 clone
 
 It appears as **`/dev/ttyUSB0`**, not `/dev/ttyACM0`. That path belongs to an
-Arduino with the ATmega16U2 bridge; this one uses a CH340, and Linux hands
-those to a different driver. The daemon looks the board up by its USB id
+Uno with the ATmega16U2 bridge; this one uses a CH340, and Linux hands those
+to a different driver. The daemon looks the board up by its USB id
 (`1a86:7523`) first, so the number moving between reboots does not matter.
 
-## Before it will run
-
-The port is owned by `root:dialout` with mode `crw-rw----`, so the user
-running the daemon must be in that group:
+The port is owned by `root:dialout` with mode `crw-rw----`:
 
 ```bash
 sudo usermod -aG dialout ubuntu
 ```
 
-Log out and back in — group membership is read at login, so an existing shell
-keeps the old set and the daemon inherits it.
+## USB or GPIO UART, never both
+
+The header comment in the sketch documents a resistor divider from D1 to the
+Pi GPIO pins. That is the alternative to USB, not an addition to it: D0/D1 are
+shared with the USB bridge, and two transmitters on one line produce only
+garbage. This homelab uses USB. Leave the GPIO wiring off.
 
 ## Install
 
@@ -51,25 +100,9 @@ sudo systemctl enable --now roomhub
 journalctl -u roomhub -f
 ```
 
-## Why no `delay()` anywhere
+Stop the daemon before uploading a new sketch. Two processes cannot hold the
+same serial port, and `avrdude` will fail with a device-busy error:
 
-On a board with one thread, every `delay()` is time the rest of the system
-does not exist: a button press is missed, and a serial line arrives half-read.
-The sketch debounces by *stability* instead — a reading has to hold the same
-value for 30 ms before it counts — which also solves a problem specific to
-this shield. All five buttons share one analog pin through a resistor ladder,
-so a key travelling to its position passes through the voltages of its
-neighbours: a single sample can report `LEFT` on the way to `SELECT`.
-
-The thresholds sit midway between the nominal readings rather than near them.
-Supply sag, resistor tolerance and a long USB cable all shift the values, and
-midpoints keep the widest margin on both sides.
-
-## Actions
-
-`ACTIONS` in `hub_kamar.py` maps a button name to a function returning the two
-rows to display. The ones shipped are small on purpose — status, disk, restart
-one named container, backlight, and a placeholder.
-
-Keep destructive actions narrow. A wrong press at a wall panel should cost one
-container, not the stack.
+```bash
+sudo systemctl stop roomhub
+```

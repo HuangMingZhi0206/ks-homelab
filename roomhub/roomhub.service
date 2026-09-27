@@ -1,5 +1,5 @@
 [Unit]
-Description=Room hub — LCD keypad panel on the Arduino
+Description=Room hub — Arduino panel on USB serial
 # The board is on a USB cable, so it may not exist at boot and may vanish
 # later. The daemon handles both itself; this only avoids a pointless failure
 # in the first seconds after boot.
@@ -8,15 +8,24 @@ After=network.target
 [Service]
 Type=simple
 User=ubuntu
+# Reading and writing the serial port needs this group; see README.
+SupplementaryGroups=dialout
 ExecStart=/usr/bin/python3 /opt/homelab/roomhub/hub_kamar.py
 Restart=always
 RestartSec=5
 
-# Nothing here needs to write outside its own logs.
+# Creates /run/roomhub owned by this user, and removes it on stop, so the
+# command FIFO never outlives the daemon that reads it.
+RuntimeDirectory=roomhub
+RuntimeDirectoryMode=0750
+
 NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=true
 PrivateTmp=true
+# ProtectSystem=strict makes everything read-only, including /opt. The metrics
+# file is the one thing this daemon writes outside its own logs.
+ReadWritePaths=/opt/homelab/monitoring/textfile
 
 [Install]
 WantedBy=multi-user.target
