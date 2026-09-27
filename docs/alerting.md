@@ -107,8 +107,8 @@ Terverifikasi utuh dengan cara ini pada 2026-09-19.
 
 ## Aturannya
 
-Lima saja, dan itu disengaja. Setiap alert yang kamu abaikan melatihmu
-mengabaikan yang berikutnya.
+Sepuluh, dan tiap tambahan harus membayar tempatnya. Setiap alert yang kamu
+abaikan melatihmu mengabaikan yang berikutnya.
 
 | Aturan | Memicu saat | Tunda |
 |---|---|---|
@@ -117,6 +117,11 @@ mengabaikan yang berikutnya.
 | **Disk space low** | sisa < 10% | 15 menit |
 | **Memory nearly exhausted** | `MemAvailable` < 10% | 15 menit |
 | **CPU temperature high** | > 80 °C | 10 menit |
+| **Filesystem read-only** | root remount jadi read-only | langsung |
+| **Proxmox guest down** | VM 100/101 mati | 5 menit |
+| **Certificate expiring** | sertifikat internal < 14 hari | 1 jam |
+| **Room panel silent** | panel kamar diam > 15 menit | 10 menit |
+| **Room sensor not reading** | DHT11 bisu padahal panel hidup | 30 menit |
 
 Yang **tidak** ada, dan sengaja: CPU persen, load average, dan RAM terpakai.
 Ketiganya berfluktuasi wajar. RAM terpakai tinggi di Linux justru sehat —
@@ -132,6 +137,31 @@ Dua aturan yang lahir dari kejadian nyata:
 
 `repeat_interval` 4 jam: cukup sering untuk tidak terlupakan, cukup jarang
 untuk tidak jadi kebisingan.
+
+## Bertanya balik, dan menyuruh
+
+Alert itu satu arah. `scripts/telegram-status.sh` membalikkannya: dijalankan
+cron tiap menit, membaca `getUpdates`, dan hanya melayani `TELEGRAM_CHAT_ID`.
+Orang lain yang menemukan bot-nya dapat kesunyian — nama bot bisa dicari,
+chat id tidak.
+
+| Perintah | Isi |
+|---|---|
+| `/status` | uptime, load, suhu CPU, undervolt, disk, container mati, alert aktif |
+| `/pve` | node Proxmox, guest hidup/mati, guest tanpa backup, target gagal scrape |
+| `/kamar` | suhu, kelembapan, status AC, umur laporan terakhir |
+| `/ac on\|off\|24` | kontrol AC lewat panel kamar |
+| `/lampu [mode\|terang\|redup\|timer10\|timer30]` | lampu meja |
+
+Dua perintah terakhir menggerakkan benda nyata, jadi balasannya berbunyi
+"perintah dikirim", bukan "AC menyala". IR itu satu arah: AC tidak pernah
+mengonfirmasi, dan mengaku tahu hasilnya adalah tebakan yang berpakaian fakta.
+Lihat `roomhub/README.md`.
+
+> **Satu bot, satu pembaca.** Hanya satu proses boleh melakukan `getUpdates`
+> untuk satu bot. Kalau nanti kamu memasang integrasi Telegram di Home
+> Assistant, beri dia bot sendiri — kalau tidak, keduanya akan saling mencuri
+> pesan, dan gejalanya adalah perintah yang kadang jalan kadang hilang.
 
 ## Menutup lubang terakhir: heartbeat ke luar
 

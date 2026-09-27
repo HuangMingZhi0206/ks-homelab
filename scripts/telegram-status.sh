@@ -52,6 +52,95 @@ prom_one() {
 
 pct() { [[ -n "$1" ]] && awk -v v="$1" 'BEGIN{printf "%.0f%%", v*100}' || echo '?'; }
 
+# A value with its unit, or "?" when the metric is missing. Distinguishing the
+# two matters: "0 C" and "no reading" are very different bedrooms.
+unit() { [[ -n "$1" ]] && printf '%s%s' "$1" "${2:-}" || printf '?'; }
+
+# --- room panel --------------------------------------------------------------
+#
+# The Arduino in the bedroom, via roomhub/hub_kamar.py. See roomhub/README.md.
+
+FIFO="/var/lib/roomhub/cmd"
+
+# Opening a FIFO for writing blocks until something opens it for reading. The
+# daemon holds it open, so this returns instantly while roomhub is running —
+# and waits forever if it is not. This script runs from cron every minute, so
+# without the timeout a stopped daemon would leave one stuck process per
+# minute until the Pi ran out of them.
+roomhub_send() {
+  if [[ ! -p "$FIFO" ]]; then
+    send "⚠️ Panel kamar tidak aktif. Cek: systemctl status roomhub"
+    return 1
+  fi
+  if ! timeout 3 sh -c 'printf "%s\n" "$1" > "$2"' _ "$1" "$FIFO"; then
+    send "⚠️ Panel kamar tidak merespons. Cek: journalctl -u roomhub -n 30"
+    return 1
+  fi
+  return 0
+}
+
+kamar_report() {
+  local t h ac act age
+
+  t="$(prom_one 'roomhub_room_temperature_celsius')"
+  h="$(prom_one 'roomhub_room_humidity_percent')"
+  ac="$(prom_one 'roomhub_ac_power')"
+  act="$(prom_one 'roomhub_ac_target_celsius')"
+  age="$(prom_one 'time() - roomhub_last_status_timestamp_seconds')"
+
+  printf '%s\n\n' "🛏 Kamar"
+  printf 'suhu      : %s\n' "$(unit "$t" ' C')"
+  printf 'kelembapan: %s\n' "$(unit "$h" '%')"
+  printf 'ac        : %s %s\n' \
+    "$([[ "$ac" == "1" ]] && echo ON || { [[ -n "$ac" ]] && echo OFF || echo '?'; })" \
+    "${act:+(set $act C)}"
+  # The sensor line and the link line are separate on purpose: a missing
+  # temperature with a fresh link means the DHT11 failed, not the panel.
+  printf 'lapor     : %s\n' "$([[ -n "$age" ]] && awk -v a="$age" 'BEGIN{printf "%.0f detik lalu", a}' || echo 'tidak ada data')"
+}
+
+# Commands physically move things in a bedroom, so say what was sent, not what
+# happened. IR is one way: the AC never confirms, and claiming it turned on
+# would be a guess dressed as a fact.
+ac_command() {
+  local arg
+  arg="$(printf '%s' "$1" | tr -d ' ' | tr '[:upper:]' '[:lower:]')"
+
+  case "$arg" in
+    on)  roomhub_send 'ACPOWER=ON'  && send "❄️ AC: perintah ON dikirim" ;;
+    off) roomhub_send 'ACPOWER=OFF' && send "❄️ AC: perintah OFF dikirim" ;;
+    ''|help)
+      send "/ac on — nyalakan"$'\n'"/ac off — matikan"$'\n'"/ac 24 — set suhu 16-30" ;;
+    *)
+      if [[ "$arg" =~ ^[0-9]+$ ]] && (( arg >= 16 && arg <= 30 )); then
+        roomhub_send "ACTEMP=${arg}" && send "❄️ AC: suhu ${arg} C dikirim"
+      else
+        send "Suhu harus 16-30. Contoh: /ac 24"
+      fi ;;
+  esac
+}
+
+# Index into menuLampu[] in roomhub.ino. The lamp remote only sends toggles and
+# cannot report anything back, so there is no state to show — only presses.
+lampu_command() {
+  local arg idx
+  arg="$(printf '%s' "$1" | tr -d ' ' | tr '[:upper:]' '[:lower:]')"
+
+  case "$arg" in
+    ''|on|off|toggle) idx=0 ;;
+    mode)             idx=1 ;;
+    terang)           idx=2 ;;
+    redup)            idx=3 ;;
+    timer10)          idx=4 ;;
+    timer30)          idx=5 ;;
+    *)
+      send "/lampu — on/off"$'\n'"/lampu mode | terang | redup"$'\n'"/lampu timer10 | timer30"
+      return ;;
+  esac
+
+  roomhub_send "SEND=0,${idx}" && send "💡 Lampu: perintah dikirim"
+}
+
 status_report() {
   local up load temp undervolt disk hdd stopped firing
   up="$(uptime -p 2>/dev/null || echo '?')"
@@ -149,6 +238,15 @@ while read -r text; do
   case "$text" in
     /status*) send "$(status_report)" ;;
     /pve*)    send "$(pve_report)" ;;
-    /help*)   send "/status — this Pi and its alerts"$'\n'"/pve — Proxmox node, guests and scrape targets" ;;
+    /kamar*)  send "$(kamar_report)" ;;
+    # Match on the space or end of string, so /account never reaches /ac.
+    /ac|/ac\ *)       ac_command "${text#/ac}" ;;
+    /lampu|/lampu\ *) lampu_command "${text#/lampu}" ;;
+    /help*)
+      send "/status — this Pi and its alerts"$'\n'\
+"/pve — Proxmox node, guests and scrape targets"$'\n'\
+"/kamar — suhu, kelembapan, status AC"$'\n'\
+"/ac on|off|24 — kontrol AC"$'\n'\
+"/lampu [mode|terang|redup|timer10|timer30] — lampu meja" ;;
   esac
 done
