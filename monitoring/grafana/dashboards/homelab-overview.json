@@ -96,6 +96,60 @@
           "legendFormat": "success={{success}}"
         }
       ]
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Kamar — Suhu & Kelembapan (DHT11)",
+      "description": "Dari Arduino di kamar, lewat roomhub/hub_kamar.py dan textfile collector node-exporter. Garis putus saat sensor gagal dibaca: itu disengaja, 0 °C lebih menyesatkan daripada lubang.",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": { "unit": "celsius" },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "Kelembapan" },
+            "properties": [
+              { "id": "unit", "value": "humidity" },
+              { "id": "custom.axisPlacement", "value": "right" }
+            ]
+          }
+        ]
+      },
+      "targets": [
+        { "refId": "A", "expr": "roomhub_room_temperature_celsius", "legendFormat": "Suhu" },
+        { "refId": "B", "expr": "roomhub_room_humidity_percent", "legendFormat": "Kelembapan" }
+      ]
+    },
+    {
+      "id": 8,
+      "type": "stat",
+      "title": "AC Kamar — menurut Arduino",
+      "description": "Bukan kondisi AC sebenarnya. IR satu arah, jadi ini yang terakhir diperintahkan dari panel. Pakai remote asli dan angka ini tertinggal sampai perintah berikutnya.",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": { "unit": "celsius" },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "Power" },
+            "properties": [
+              { "id": "unit", "value": "short" },
+              {
+                "id": "mappings",
+                "value": [
+                  { "type": "value", "options": { "0": { "text": "OFF", "color": "text" }, "1": { "text": "ON", "color": "green" } } }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "options": { "textMode": "value_and_name", "colorMode": "value", "graphMode": "none" },
+      "targets": [
+        { "refId": "A", "expr": "roomhub_ac_power", "instant": true, "legendFormat": "Power" },
+        { "refId": "B", "expr": "roomhub_ac_target_celsius", "instant": true, "legendFormat": "Setpoint" }
+      ]
     }
   ]
 }

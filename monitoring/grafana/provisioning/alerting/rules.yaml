@@ -251,3 +251,78 @@ groups:
               expression: A
               conditions:
                 - evaluator: {type: lt, params: [14]}
+
+      # The Arduino reports every 5 seconds, and the daemon pings it after
+      # three minutes of silence, so a quarter of an hour without a word means
+      # the link is genuinely gone: USB unplugged, board dead, or the daemon
+      # stopped. The metric file keeps its last value when the daemon dies, so
+      # measure the age of the reading rather than trusting that it exists.
+      #
+      # noDataState is Alerting here, unlike the other rules: if the file
+      # disappears entirely, that is the same failure, not the absence of one.
+      # Stopping roomhub.service to flash the board will fire this after
+      # ~25 minutes. That is correct — it is also how you find out you forgot
+      # to start it again.
+      - uid: homelab-roomhub-stale
+        title: Room panel silent
+        condition: B
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Panel kamar tidak melapor sejak {{ humanizeDuration $values.A.Value }} lalu. Cek: journalctl -u roomhub -n 50'
+        noDataState: Alerting
+        execErrState: OK
+        data:
+          - refId: A
+            relativeTimeRange: {from: 3600, to: 0}
+            datasourceUid: prometheus
+            model:
+              refId: A
+              instant: true
+              expr: time() - roomhub_last_status_timestamp_seconds
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: {type: gt, params: [900]}
+
+      # A different failure from the one above: the board is talking, but the
+      # DHT11 is not answering it. The daemon omits the metric rather than
+      # publishing a zero, so absent() is what detects it.
+      #
+      # 30 minutes because a DHT11 drops the occasional read on its own — it is
+      # a cheap sensor on a single-wire protocol with no error correction — and
+      # alerting on one bad read would only teach you to ignore this.
+      #
+      # noDataState must be OK: absent() returns nothing while the metric is
+      # present, so healthy looks exactly like no data here.
+      - uid: homelab-roomhub-sensor
+        title: Room sensor not reading
+        condition: B
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'DHT11 di kamar tidak terbaca, padahal panelnya hidup. Biasanya kabel data di D2 longgar.'
+        noDataState: OK
+        execErrState: OK
+        data:
+          - refId: A
+            relativeTimeRange: {from: 3600, to: 0}
+            datasourceUid: prometheus
+            model:
+              refId: A
+              instant: true
+              expr: absent(roomhub_room_temperature_celsius)
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: {type: gt, params: [0]}

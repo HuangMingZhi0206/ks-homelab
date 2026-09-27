@@ -109,3 +109,132 @@ rest:
         availability: "{{ value_json.data.result | count > 0 }}"
         value_template: "{{ value_json.data.result[0].value[1] | float | round(2) }}"
         state_class: measurement
+
+  # --- Room panel (roomhub/ in this repo) ----------------------------------
+  # The Arduino has no network. The Pi publishes its readings as Prometheus
+  # metrics and we read them back here, the same way as everything above.
+  # Goes unavailable when the DHT11 fails, which it occasionally does.
+  - resource: http://prometheus:9090/api/v1/query
+    params:
+      query: 'roomhub_room_temperature_celsius'
+    scan_interval: 60
+    sensor:
+      - name: Suhu Kamar
+        unique_id: suhu_kamar
+        availability: "{{ value_json.data.result | count > 0 }}"
+        value_template: "{{ value_json.data.result[0].value[1] | float | round(1) }}"
+        unit_of_measurement: "°C"
+        device_class: temperature
+        state_class: measurement
+
+  - resource: http://prometheus:9090/api/v1/query
+    params:
+      query: 'roomhub_room_humidity_percent'
+    scan_interval: 60
+    sensor:
+      - name: Kelembapan Kamar
+        unique_id: kelembapan_kamar
+        availability: "{{ value_json.data.result | count > 0 }}"
+        value_template: "{{ value_json.data.result[0].value[1] | float | round(0) }}"
+        unit_of_measurement: "%"
+        device_class: humidity
+        state_class: measurement
+
+  # These two back the switch and the number below. They are what the Arduino
+  # BELIEVES about the AC, not what the AC is doing — IR is one way and the
+  # unit cannot answer. Use the original remote and these go stale until the
+  # next command from here. 30 seconds rather than 60 so the toggle in the app
+  # settles back quickly after you press it.
+  - resource: http://prometheus:9090/api/v1/query
+    params:
+      query: 'roomhub_ac_power'
+    scan_interval: 30
+    sensor:
+      - name: AC Kamar Power
+        unique_id: ac_kamar_power
+        availability: "{{ value_json.data.result | count > 0 }}"
+        value_template: "{{ value_json.data.result[0].value[1] | int }}"
+
+  - resource: http://prometheus:9090/api/v1/query
+    params:
+      query: 'roomhub_ac_target_celsius'
+    scan_interval: 30
+    sensor:
+      - name: AC Kamar Setpoint
+        unique_id: ac_kamar_setpoint
+        availability: "{{ value_json.data.result | count > 0 }}"
+        value_template: "{{ value_json.data.result[0].value[1] | int }}"
+        unit_of_measurement: "°C"
+
+# ---------------------------------------------------------------------------
+# Writing to the room panel.
+#
+# hub_kamar.py reads lines from a FIFO at /var/lib/roomhub/cmd, bind-mounted
+# into this container. No port, no API key, no broker: file permissions are
+# the whole access-control story, and the daemon whitelists the four command
+# forms it accepts, so a typo lands in the journal instead of going quiet.
+#
+# The `sh -c` wrapper is required, not decoration. shell_command runs a
+# command WITH arguments through exec, not through a shell, so a bare
+# `echo X > /path` would pass ">" and the path to echo as text and write
+# nothing. Only a command with no arguments at all gets a shell.
+# ---------------------------------------------------------------------------
+shell_command:
+  roomhub_ac_on: 'sh -c "echo ACPOWER=ON > /var/lib/roomhub/cmd"'
+  roomhub_ac_off: 'sh -c "echo ACPOWER=OFF > /var/lib/roomhub/cmd"'
+  roomhub_ac_temp: 'sh -c "echo ACTEMP={{ suhu | int }} > /var/lib/roomhub/cmd"'
+  roomhub_lampu: 'sh -c "echo SEND=0,{{ idx | int }} > /var/lib/roomhub/cmd"'
+
+template:
+  - switch:
+      - name: AC Kamar
+        unique_id: roomhub_ac_switch
+        icon: mdi:air-conditioner
+        availability: "{{ states('sensor.ac_kamar_power') not in ['unknown', 'unavailable'] }}"
+        state: "{{ is_state('sensor.ac_kamar_power', '1') }}"
+        turn_on:
+          service: shell_command.roomhub_ac_on
+        turn_off:
+          service: shell_command.roomhub_ac_off
+
+  - number:
+      - name: AC Suhu
+        unique_id: roomhub_ac_setpoint
+        icon: mdi:thermometer
+        availability: "{{ states('sensor.ac_kamar_setpoint') not in ['unknown', 'unavailable'] }}"
+        state: "{{ states('sensor.ac_kamar_setpoint') | int(25) }}"
+        min: 16
+        max: 30
+        step: 1
+        unit_of_measurement: "°C"
+        set_value:
+          service: shell_command.roomhub_ac_temp
+          data:
+            suhu: "{{ value }}"
+
+  # Buttons, not switches: the lamp remote sends one toggle code and has no
+  # way to report what the lamp is doing. A switch would show a state it
+  # cannot know, and would be wrong every time the lamp is used from anywhere
+  # else. The index is the position in menuLampu[] in roomhub.ino.
+  - button:
+      - name: Lampu Meja
+        unique_id: roomhub_lampu_toggle
+        icon: mdi:lightbulb
+        press:
+          service: shell_command.roomhub_lampu
+          data:
+            idx: 0
+      - name: Lampu Terang
+        unique_id: roomhub_lampu_terang
+        icon: mdi:brightness-7
+        press:
+          service: shell_command.roomhub_lampu
+          data:
+            idx: 2
+      - name: Lampu Redup
+        unique_id: roomhub_lampu_redup
+        icon: mdi:brightness-4
+        press:
+          service: shell_command.roomhub_lampu
+          data:
+            idx: 3

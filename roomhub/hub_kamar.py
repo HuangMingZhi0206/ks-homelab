@@ -56,8 +56,15 @@ TEXTFILE = Path(
 
 # Commands arrive here as lines. A FIFO rather than a socket: no port, no
 # listener to secure, and file permissions are the whole access control story.
-#   echo 'ACPOWER=OFF' > /run/roomhub/cmd
-FIFO = Path(os.environ.get("ROOMHUB_FIFO", "/run/roomhub/cmd"))
+#   echo 'ACPOWER=OFF' > /var/lib/roomhub/cmd
+#
+# Under /var/lib and not /run, because Home Assistant bind-mounts this
+# directory. A bind mount pins the inode it was given at container start: if
+# the directory were deleted and recreated — which is exactly what systemd
+# RuntimeDirectory does on every restart — Home Assistant would keep writing
+# into the old one, which nothing reads any more. The writes would succeed and
+# the AC would never move.
+FIFO = Path(os.environ.get("ROOMHUB_FIFO", "/var/lib/roomhub/cmd"))
 
 # Only these reach the board. The sketch ignores anything it does not
 # recognise, but a whitelist keeps a typo in a cron job from becoming a

@@ -14,10 +14,14 @@ ExecStart=/usr/bin/python3 /opt/homelab/roomhub/hub_kamar.py
 Restart=always
 RestartSec=5
 
-# Creates /run/roomhub owned by this user, and removes it on stop, so the
-# command FIFO never outlives the daemon that reads it.
-RuntimeDirectory=roomhub
-RuntimeDirectoryMode=0750
+# Creates /var/lib/roomhub owned by this user and, unlike RuntimeDirectory,
+# keeps it across restarts. Home Assistant bind-mounts this directory to write
+# commands, and a bind mount survives a restart only if the directory does:
+# delete and recreate it and the container keeps writing into the old inode.
+StateDirectory=roomhub
+# 0770 rather than 0750: the group is what lets another service write commands
+# without being root.
+StateDirectoryMode=0770
 
 NoNewPrivileges=true
 ProtectSystem=strict

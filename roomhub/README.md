@@ -54,14 +54,41 @@ daemon waits three minutes before it treats silence as a fault.
 ## Sending commands
 
 ```bash
-echo 'ACPOWER=OFF' > /run/roomhub/cmd
-echo 'SEND=0,0'    > /run/roomhub/cmd     # lamp on/off
+echo 'ACPOWER=OFF' > /var/lib/roomhub/cmd
+echo 'SEND=0,0'    > /var/lib/roomhub/cmd     # lamp on/off
 ```
 
 A FIFO rather than a socket: no port, no listener to secure, and the file
 permissions are the whole access-control story. The daemon whitelists the four
 command forms above, so a typo in a cron job fails loudly in the journal
 instead of becoming a mystery.
+
+Under `/var/lib` and not `/run`, because Home Assistant bind-mounts this
+directory. A bind mount pins the inode it was given when the container
+started; `RuntimeDirectory` deletes and recreates `/var/lib/roomhub` on every
+restart, so Home Assistant would go on writing into an inode nothing reads.
+The writes would succeed and the AC would never move — the worst kind of
+failure, because everything reports success.
+
+## From the phone
+
+`homeassistant/config/configuration.yaml` turns the FIFO into entities, so
+they appear in the Companion app, in Assist, and in automations:
+
+| Entity | What it does |
+|---|---|
+| `switch.ac_kamar` | AC power |
+| `number.ac_suhu` | setpoint, 16–30 |
+| `button.lampu_meja` / `lampu_terang` / `lampu_redup` | lamp |
+| `sensor.suhu_kamar` / `sensor.kelembapan_kamar` | DHT11 |
+
+The AC toggle can lag up to 30 seconds after a press: its state is read back
+from Prometheus rather than assumed, so what you see is what the Arduino
+actually holds.
+
+Start `roomhub.service` before the Home Assistant container. The mount point
+has to exist first, or Docker creates an empty directory of its own and the
+FIFO will not be in it.
 
 ## What the AC metrics actually mean
 

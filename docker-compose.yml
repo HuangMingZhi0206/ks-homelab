@@ -631,6 +631,13 @@ services:
       # Lets Home Assistant show the correct local time without a restart when
       # the host's timezone data changes.
       - /etc/localtime:/etc/localtime:ro
+      # The command FIFO the room panel reads. This is the whole control path
+      # from the phone to the AC: Home Assistant writes a line, hub_kamar.py
+      # passes it to the Arduino, the Arduino sends IR. Created by systemd
+      # (StateDirectory in roomhub/roomhub.service), so start roomhub before
+      # this container or the mount point will be an empty directory Docker
+      # made for you.
+      - /var/lib/roomhub:/var/lib/roomhub
     labels:
       traefik.enable: "true"
       traefik.http.routers.homeassistant.rule: Host(`ha.${DOMAIN}`)
