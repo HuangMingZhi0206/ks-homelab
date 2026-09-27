@@ -34,8 +34,20 @@ cd "$REPO_ROOT"
 API="https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}"
 STATE="${HOME}/.telegram-status-offset"
 
+# Pass the URL on stdin, never in argv.
+#
+# The bot token is part of every Telegram URL, and anything in a command line
+# is world-readable through ps — to any user on this box, and to anyone shown
+# a process listing. It also lands in any transcript of one, which is how this
+# was found. curl -K reads options from a file; "-" makes that stdin, which no
+# other process can see.
+curl_tg() {
+  local url="$1"; shift
+  printf 'url = "%s"\n' "$url" | curl -fsS -K - "$@"
+}
+
 send() {
-  curl -fsS -m 15 --retry 2 -X POST "${API}/sendMessage" \
+  curl_tg "${API}/sendMessage" -m 15 --retry 2 -X POST \
     --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
     --data-urlencode "text=$1" >/dev/null || true
 }
@@ -243,8 +255,8 @@ poll_once() {
   # No allowed_updates filter: its value needs quotes, and an unencoded quote
   # in the URL makes curl refuse the request outright — silently, because
   # stderr is discarded here. The jq select below does the same filtering.
-  updates="$(curl -fsS -m $((POLL_TIMEOUT + 15)) \
-    "${API}/getUpdates?offset=${offset}&timeout=${POLL_TIMEOUT}" 2>/dev/null)" || return 1
+  updates="$(curl_tg "${API}/getUpdates?offset=${offset}&timeout=${POLL_TIMEOUT}" \
+    -m $((POLL_TIMEOUT + 15)) 2>/dev/null)" || return 1
   echo "$updates" | jq -e '.ok' >/dev/null 2>&1 || return 1
 
   # Advance the offset even for messages we ignore, or an unrelated message

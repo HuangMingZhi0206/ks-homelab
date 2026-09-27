@@ -73,12 +73,16 @@ body="host=$(hostname) uptime=${uptime_s}s undervoltage=${undervolt}"
 # after a reboot the Pi *is* alive. The healthchecks ping below is the other
 # half: it comes from outside the house, so it still works when this machine
 # is gone entirely. Neither replaces the other.
+#
+# The URL goes in on stdin rather than argv: the bot token is part of it, and
+# a command line is readable by every user on the machine through ps. curl -K
+# reads its options from a file, and "-" makes that stdin.
 telegram() {
   [[ -n "${TELEGRAM_BOT_TOKEN:-}" && -n "${TELEGRAM_CHAT_ID:-}" ]] || return 0
-  curl -fsS -m 10 --retry 2 -X POST \
-    "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
-    --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
-    --data-urlencode "text=$1" >/dev/null || true
+  printf 'url = "%s"\n' "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" |
+    curl -fsS -K - -m 10 --retry 2 -X POST \
+      --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
+      --data-urlencode "text=$1" >/dev/null || true
 }
 
 # Undervoltage has no Prometheus metric, so this is the only place it can be
@@ -110,15 +114,21 @@ if command -v smartctl >/dev/null 2>&1 && [[ -b /dev/sda ]]; then
   fi
 fi
 
+# Same reasoning as telegram() above: HEALTHCHECKS_URL is a capability — the
+# URL *is* the credential, so anyone who reads it from a process listing can
+# forge an "everything is fine" ping. Keep it out of argv too.
+#   $1 = "" for a success ping, "/fail" for a failure
+ping_hc() {
+  printf 'url = "%s"\n' "${HEALTHCHECKS_URL}$1" |
+    curl -fsS -K - -m 10 --retry 3 --data-raw "$2" >/dev/null || true
+}
+
 if [[ "$uptime_s" -lt 600 ]]; then
   telegram "🔴 ${HOSTNAME:-pi} rebooted ${uptime_s}s ago — ${body}"
-  curl -fsS -m 10 --retry 3 --data-raw "REBOOTED ${uptime_s}s ago | ${body}" \
-    "${HEALTHCHECKS_URL}/fail" >/dev/null
+  ping_hc /fail "REBOOTED ${uptime_s}s ago | ${body}"
 elif [[ -n "$down" ]]; then
   telegram "🔴 ${HOSTNAME:-pi} containers down:${down} — ${body}"
-  curl -fsS -m 10 --retry 3 --data-raw "DOWN:${down} | ${body}" \
-    "${HEALTHCHECKS_URL}/fail" >/dev/null
+  ping_hc /fail "DOWN:${down} | ${body}"
 else
-  curl -fsS -m 10 --retry 3 --data-raw "ok | ${body}" \
-    "${HEALTHCHECKS_URL}" >/dev/null
+  ping_hc "" "ok | ${body}"
 fi
