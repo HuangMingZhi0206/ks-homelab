@@ -173,6 +173,15 @@ Dua perintah terakhir menggerakkan benda nyata, jadi balasannya berbunyi
 mengonfirmasi, dan mengaku tahu hasilnya adalah tebakan yang berpakaian fakta.
 Lihat `roomhub/README.md`.
 
+> **Kredensial tidak pernah masuk ke argumen perintah.** Token bot adalah
+> bagian dari setiap URL Telegram, dan baris perintah bisa dibaca semua user di
+> mesin itu lewat `ps`. Karena itu URL-nya dikirim lewat stdin (`curl -K -`),
+> baik di `telegram-status.sh` maupun di `heartbeat.sh`. `HEALTHCHECKS_URL`
+> diperlakukan sama: URL itu *adalah* kredensialnya, dan siapa pun yang
+> membacanya bisa memalsukan ping "semua aman" — yang lebih buruk daripada
+> alert bocor, karena ia membungkam satu-satunya pemeriksa yang masih bekerja
+> saat Pi-nya mati. Ikuti pola ini kalau menambah pemanggilan API baru.
+
 > **Satu bot, satu pembaca.** Hanya satu proses boleh melakukan `getUpdates`
 > untuk satu bot. Kalau nanti kamu memasang integrasi Telegram di Home
 > Assistant, beri dia bot sendiri — kalau tidak, keduanya akan saling mencuri

@@ -14,17 +14,26 @@ Production-ready Docker Compose homelab: **Traefik v3** (reverse proxy + automat
 │   └── users_database.yml.example
 ├── monitoring/
 │   ├── prometheus/prometheus.yml # Scrape targets
+│   ├── textfile/                 # node-exporter textfile collector drop point
 │   └── grafana/
 │       ├── provisioning/         # Datasource, dashboards, and alert rules
 │       └── dashboards/           # Dashboard JSON (Homelab Overview included)
 ├── homepage/config/              # Homepage dashboard config (optional service)
 ├── filebrowser/config.yaml       # File Browser Quantum config (optional service)
 ├── homeassistant/config/         # Home Assistant config (optional service)
+├── roomhub/                      # Arduino room panel: IR remote, DHT11, LCD
+│   ├── roomhub.ino               # Sketch: lamp + AC over IR, sensor, clock
+│   ├── hub_kamar.py              # Pi daemon: clock, metrics, command FIFO
+│   ├── roomhub.service           # systemd unit for the daemon
+│   └── README.md                 # Protocol, wiring, and who owns what
 ├── scripts/
 │   ├── bootstrap.sh              # One-shot setup: secrets, users, launch
 │   ├── backup.sh                 # Volume + config backup (restic or local tar)
 │   ├── add-service.sh            # Generates a compose block for a new service
-│   └── heartbeat.sh              # Outside-in health ping (healthchecks.io)
+│   ├── heartbeat.sh              # Outside-in health ping (healthchecks.io)
+│   ├── telegram-status.sh        # Two-way bot: /status /pve /room /ac /lamp
+│   ├── telegram-bot.service      # systemd unit for the bot (long polling)
+│   └── telegram-register-commands.sh  # Fills Telegram's own "/" menu
 ├── docs/
 │   ├── adding-services.md        # How to put a new app behind Traefik + SSO
 │   ├── kiosk-display.md          # Grafana on the Proxmox host's own screen
@@ -123,11 +132,21 @@ The default policy in [authelia/configuration.yml](authelia/configuration.yml) i
 
 ## Alerting
 
-Five alert rules and a Telegram contact point are provisioned from `monitoring/grafana/provisioning/alerting/` — no clicking, and they live in git like everything else. Set `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` in `.env` and run `docker compose up -d grafana`.
+Ten alert rules and a Telegram contact point are provisioned from `monitoring/grafana/provisioning/alerting/` — no clicking, and they live in git like everything else. Set `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` in `.env` and run `docker compose up -d grafana`.
 
 Grafana rather than Alertmanager, because Alertmanager would need a bridge container to reach anything here and this Pi has no power budget to spare. Telegram rather than a self-hosted notifier, because Telegram is outbound-only: Grafana calls `api.telegram.org` and the message reaches the phone anywhere. This stack ran ntfy for a while, but it lived on `lab.<domain>` with no public DNS on purpose, so alerts only ever arrived at home — the one place you do not need telling. It was removed.
 
 **It cannot tell you the Pi itself died**, because Grafana runs on the Pi. [`scripts/heartbeat.sh`](scripts/heartbeat.sh) closes that gap from outside: cron pings healthchecks.io every five minutes, and they email you when the pings stop. It checks the core containers too, so a Pi that is up with Traefik dead reports a failure rather than a cheerful ping — see [docs/alerting.md](docs/alerting.md).
+
+**Asking back:** alerts are one-way, so [`scripts/telegram-status.sh`](scripts/telegram-status.sh) runs as a service and answers `/status`, `/pve`, `/room`, `/ac` and `/lamp` in the same chat. It long-polls rather than running from cron — a one-minute cron loop meant a 30-second average wait, which reads as a broken bot. It replies only to `TELEGRAM_CHAT_ID`; anyone else who finds the bot gets silence. Only one process may poll a given bot, so give Home Assistant its own if you ever add that integration.
+
+## Room panel
+
+An Arduino Uno with an LCD keypad shield, an IR LED and a DHT11, on the Pi's USB. It is a standalone remote for the desk lamp and the bedroom AC — unplug the Pi and it still works, which is the point of a control on a wall.
+
+The Pi adds the three things the board cannot do alone: set its clock (an Uno has none, and opening the serial port reboots it), publish the DHT11 readings as Prometheus metrics through the textfile collector, and accept commands from Home Assistant or Telegram over a FIFO. See [roomhub/README.md](roomhub/README.md).
+
+The AC metrics are what the Arduino *believes*, not what the AC is doing. IR is one way and the unit never answers, so using the original remote leaves these stale until the next command from the panel.
 
 ## Optional services (Compose profiles)
 
@@ -185,6 +204,16 @@ docker compose down                      # stop (volumes/data preserved)
 ```bash
 30 3 * * * /opt/homelab/scripts/backup.sh --stop >> /var/log/homelab-backup.log 2>&1
 ```
+
+**Outside Compose:** two things run as systemd units on the host rather than as containers, because both need a device or a long-lived socket that a container would only complicate — `roomhub` (the Arduino on `/dev/ttyUSB0`) and `telegram-bot` (one long poll held open against `api.telegram.org`).
+
+```bash
+systemctl status roomhub telegram-bot
+sudo cp roomhub/roomhub.service scripts/telegram-bot.service /etc/systemd/system/
+sudo systemctl daemon-reload && sudo systemctl enable --now roomhub telegram-bot
+```
+
+Start `roomhub` before the Home Assistant container: HA bind-mounts `/var/lib/roomhub`, and Docker will silently create an empty directory of its own if the mount point is missing.
 
 **CI:** every push runs [.github/workflows/lint.yml](.github/workflows/lint.yml) — `docker compose config` across all profiles, `yamllint`, and `shellcheck` on the scripts.
 
