@@ -39,6 +39,7 @@ Production-ready Docker Compose homelab: **Traefik v3** (reverse proxy + automat
 │   ├── kiosk-display.md          # Grafana on the Proxmox host's own screen
 │   ├── monitoring-targets.md     # Proxmox API token + switch SNMP for Prometheus
 │   ├── coolify-deployments.md    # Shipping web apps through Coolify + GHCR
+│   ├── prompt-arsitektur-deploy.md  # Paste-ready brief on the deploy setup
 │   ├── alerting.md               # Grafana alert rules -> Telegram
 │   ├── storage.md                # USB HDD on the Pi, shared over Samba
 │   └── voice-assistant.md        # Local voice assistant on the Pi 5

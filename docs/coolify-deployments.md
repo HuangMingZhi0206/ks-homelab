@@ -1,5 +1,10 @@
 # Deploy aplikasi lewat Coolify
 
+> Ringkasan siap tempel dari dokumen ini, untuk meminta bantuan AI lain
+> men-deploy sebuah repo: [prompt-arsitektur-deploy.md](prompt-arsitektur-deploy.md).
+> Kalau halaman ini berubah, perbarui prompt itu juga — ia memotret, tidak
+> membaca.
+
 Coolify jalan di VM tersendiri (`192.168.200.30`, VMID 101 di Proxmox), terpisah
 dari stack homelab karena dia memasang reverse proxy sendiri yang menuntut port
 80 dan 443.
