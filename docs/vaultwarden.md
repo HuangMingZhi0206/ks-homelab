@@ -86,10 +86,35 @@ terbaru.
 Yang masuk backup: `db.sqlite3` dan salinan `db_*.sqlite3`, `rsa_key*` (penanda
 token login), `attachments/` kalau ada, dan `config.json` kalau ada.
 
-**Belum ada tujuan di luar Pi.** `backup.sh` hanya mengirim ke luar kalau `restic`
-terpasang dan `RESTIC_REPOSITORY` diisi. Tanpa itu, backup hanya tersimpan di Pi
-yang sama, dan itu **tidak dihitung sebagai backup** untuk vault ini. Tujuan yang
-direncanakan: Proxmox di Dell, ditambah satu salinan terenkripsi lain di luar rumah.
+### Tujuan di luar Pi
+
+`backup.sh` mengirim ke luar kalau `restic` terpasang dan `RESTIC_REPOSITORY` diisi
+di `.env`. Tanpa itu, backup hanya tersimpan di Pi yang sama, dan itu **tidak dihitung
+sebagai backup** untuk vault ini.
+
+Yang dipasang (2026-11-07): restic dari Pi ke host Proxmox (Dell) lewat SFTP.
+
+- Di Dell ada user `resticbak`: password terkunci, tanpa shell, dan `authorized_keys`-nya
+  berisi `restrict,command="internal-sftp"` di depan kunci Pi. Kunci itu hanya bisa SFTP:
+  `ssh dell-backup 'echo x'` dijawab `This service allows sftp connections only.`
+  Repositorinya `/srv/backup-pi/restic`.
+- Skrip **harus dijalankan sebagai root**: `authelia/users_database.yml` milik root dengan
+  izin 600, dan `tar` sebagai `ubuntu` gagal dengan `Permission denied`. Karena itu kunci,
+  `known_hosts`, dan alias `dell-backup` juga ada di `/root/.ssh`.
+- Di `.env`: `RESTIC_REPOSITORY=sftp:dell-backup:/srv/backup-pi/restic` dan
+  `RESTIC_PASSWORD_FILE=/home/ubuntu/.restic-password`.
+- **Password repositori dibuat acak di Pi dan harus dicatat di kertas**, di tempat fisik
+  yang aman. Backup terenkripsi dengan password itu. Kalau Pi rusak dan password hanya ada
+  di file di Pi, isi backup tidak bisa dibuka, dan tidak ada cara memulihkannya. Jangan
+  simpan di vault yang sedang dibackup (melingkar).
+- Jadwal (cron milik root, `sudo crontab -e`):
+  `30 3 * * * cd /opt/homelab && ./scripts/backup.sh >> /var/log/homelab-backup.log 2>&1`
+
+Batasnya, supaya tidak terlihat lebih aman dari kenyataan: Dell dan Pi berada di rumah dan
+sumber listrik yang sama, jadi kebakaran, pencurian, atau lonjakan listrik mengenai
+keduanya. SFTP juga bukan append-only: Pi yang dibobol bisa menghapus backup di Dell.
+Karena itu perlu satu salinan terenkripsi ketiga di luar rumah atau offline (misalnya
+repositori restic lain di flash drive yang disimpan terpisah).
 
 ## Uji restore
 
@@ -115,20 +140,36 @@ browser, jadi web vault bisa jalan tanpa HTTPS. Login dengan akun yang sama dan
 pastikan data uji muncul. Bersihkan sesudahnya: `docker rm -f vw_restore` dan
 `docker volume rm vw_restore`.
 
-## Belum terverifikasi
+## Hasil uji restore pertama (2026-11-07)
 
-Ditulis dari dokumentasi resmi, belum dijalankan di Pi ini:
+Snapshot `8fa2a20a` (5 file, 65 MiB) dipulihkan dari repositori di Dell ke volume
+terpisah. Basis data dihitung langsung:
 
-- Bahwa `cap_drop: ALL` cukup untuk Vaultwarden. Kalau container gagal start,
-  itulah yang pertama dicurigai.
-- Pola nama `db_*.sqlite3` hasil `/vaultwarden backup` (dipakai untuk pemangkasan
-  dan untuk langkah restore di atas). Cek nama file sebenarnya setelah backup
-  pertama.
-- Bahwa `internal-only` melihat alamat klien yang benar (LAN dan Tailscale) dan
-  bukan alamat gateway Docker. Uji dari laptop (harus lolos) dan dari dalam
-  Docker (harus ditolak).
+| File di dalam backup | Integritas | Jumlah pengguna |
+|---|---|---|
+| `db_..._114756.sqlite3` (sebelum akun dibuat) | ok | 0 |
+| `db_..._122026.sqlite3` (dari `backup.sh`, sesudah akun dibuat) | ok | 1 |
+| `db.sqlite3` (hasil menyalin salinan konsisten itu) | ok | 1 |
+
+Lalu instance Vaultwarden dijalankan dari volume hasil restore: `/alive` menjawab 200. Itu
+membuktikan akun tersimpan dan basis datanya utuh. **Belum** dicoba: login dengan master
+password ke instance hasil restore (terowongan SSH di atas), yang menguji sampai ke sisi
+klien.
+
+## Sudah terbukti di Pi ini, dan yang belum
+
+Terbukti (2026-11-07): `cap_drop: ALL` cukup untuk Vaultwarden 1.37.5; `/vaultwarden
+backup` menulis `db_YYYYMMDD_HHMMSS.sqlite3`; `internal-only` meloloskan laptop lewat
+Tailscale (`100.122.139.28` terbaca benar di log Traefik) dan menolak (`403`) permintaan
+dari dalam Docker.
+
+Belum terbukti:
+
 - Header IP klien (`IP_HEADER`, bawaan `X-Real-IP`) di belakang Traefik. Kalau salah,
-  rate limit menganggap semua klien sebagai satu alamat.
+  rate limit login menganggap semua klien sebagai satu alamat. Cek dengan melihat
+  `docker logs vaultwarden` sesudah login gagal dari laptop dan dari HP.
+- Login dengan master password ke instance hasil restore (lihat hasil uji restore).
+- Akses dari luar rumah (bagian "Dari luar rumah").
 
 ## Memperbarui versi
 
