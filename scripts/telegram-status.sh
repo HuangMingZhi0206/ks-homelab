@@ -25,7 +25,7 @@
 set -uo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "$REPO_ROOT"
+cd "$REPO_ROOT" || exit 1
 
 # shellcheck disable=SC1091
 [[ -f .env ]] && source .env
@@ -91,6 +91,9 @@ roomhub_send() {
     send "⚠️ Room panel is not running. Check: systemctl status roomhub"
     return 1
   fi
+  # The single quotes are intentional: the inner sh expands $1 and $2 itself,
+  # from the arguments after `_`, so nothing is spliced into the command string.
+  # shellcheck disable=SC2016
   if ! timeout 3 sh -c 'printf "%s\n" "$1" > "$2"' _ "$1" "$FIFO"; then
     send "⚠️ Room panel is not answering. Check: journalctl -u roomhub -n 30"
     return 1
@@ -99,7 +102,7 @@ roomhub_send() {
 }
 
 room_report() {
-  local t h ac act age
+  local t h ac act age ac_label
 
   t="$(prom_one 'roomhub_room_temperature_celsius')"
   h="$(prom_one 'roomhub_room_humidity_percent')"
@@ -110,9 +113,12 @@ room_report() {
   printf '%s\n\n' "🛏 Bedroom"
   printf 'temp     : %s\n' "$(unit "$t" ' C')"
   printf 'humidity : %s\n' "$(unit "$h" '%')"
-  printf 'ac       : %s %s\n' \
-    "$([[ "$ac" == "1" ]] && echo ON || { [[ -n "$ac" ]] && echo OFF || echo '?'; })" \
-    "${act:+(set $act C)}"
+  case "$ac" in
+    1)  ac_label=ON ;;
+    "") ac_label='?' ;;
+    *)  ac_label=OFF ;;
+  esac
+  printf 'ac       : %s %s\n' "$ac_label" "${act:+(set $act C)}"
   # The sensor line and the link line are separate on purpose: a missing
   # temperature with a fresh link means the DHT11 failed, not the panel.
   printf 'reported : %s\n' "$([[ -n "$age" ]] && awk -v a="$age" 'BEGIN{printf "%.0fs ago", a}' || echo 'no data')"
