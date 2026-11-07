@@ -76,9 +76,31 @@ else
   warn "no config state found to back up"
 fi
 
+# ------------------------------------------------------------------ vaultwarden
+# A running Vaultwarden has its SQLite database open, so tarring the live volume
+# can capture db.sqlite3 and its -wal file at two different moments. The image
+# ships a built-in online backup (since 1.32.1) that writes a consistent copy
+# into /data, which the volume tarball below then contains. Restore from that
+# db_*.sqlite3, not from db.sqlite3 — see docs/vaultwarden.md.
+#
+# Not needed with --stop: the stack is already down and the copy is consistent.
+if ! $STOP && [[ "$(docker inspect -f '{{.State.Running}}' vaultwarden 2>/dev/null)" == "true" ]]; then
+  info "Vaultwarden: consistent SQLite backup"
+  if docker exec vaultwarden /vaultwarden backup >/dev/null 2>&1; then
+    ok "db_*.sqlite3 written inside the volume"
+    # Keep the newest 7. Only files this command made; the glob does not match
+    # db.sqlite3 itself.
+    docker exec vaultwarden sh -c 'ls -1t /data/db_*.sqlite3 2>/dev/null | tail -n +8 | xargs -r rm --' \
+      || warn "could not prune old Vaultwarden backups"
+  else
+    err "Vaultwarden backup command failed — the vault copy below may be inconsistent"
+  fi
+fi
+
 # ------------------------------------------------------------------ volumes
 VOLUMES=(authelia_data redis_data grafana_data)
 $WITH_PROM && VOLUMES+=(prometheus_data)
+docker volume inspect "${COMPOSE_PROJECT}_vaultwarden_data" >/dev/null 2>&1 && VOLUMES+=(vaultwarden_data)
 
 for vol in "${VOLUMES[@]}"; do
   full="${COMPOSE_PROJECT}_${vol}"
