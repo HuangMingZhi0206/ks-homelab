@@ -126,7 +126,11 @@ done
 if command -v restic >/dev/null 2>&1 && [[ -n "${RESTIC_REPOSITORY:-}" ]]; then
   info "Pushing snapshot to restic repo: $RESTIC_REPOSITORY"
   restic backup "$STAGE" --tag homelab
-  restic forget --tag homelab \
+  # Group by host and tag, NOT restic's default of host+path. $STAGE ends in a
+  # timestamp, so by path every run is a group of one, and "keep 7 daily" keeps
+  # every snapshot forever: nothing is ever pruned. Seen in the log as
+  # "keep 1 snapshots:" repeated once per run.
+  restic forget --tag homelab --group-by host,tags \
     --keep-daily 7 --keep-weekly 4 --keep-monthly 6 --prune
   rm -rf "$STAGE"
   ok "restic snapshot stored; local staging removed"
