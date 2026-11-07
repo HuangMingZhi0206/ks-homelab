@@ -151,7 +151,7 @@ The AC metrics are what the Arduino *believes*, not what the AC is doing. IR is 
 
 ## Optional services (Compose profiles)
 
-Ten optional services ship disabled by default. Enable them by setting `COMPOSE_PROFILES` in `.env` (comma-separated) and running `docker compose up -d`, or ad hoc with `docker compose --profile <name> up -d`:
+Eleven optional services ship disabled by default. Enable them by setting `COMPOSE_PROFILES` in `.env` (comma-separated) and running `docker compose up -d`, or ad hoc with `docker compose --profile <name> up -d`:
 
 | Profile | Service | URL | Notes |
 |---|---|---|---|
@@ -164,6 +164,7 @@ Ten optional services ship disabled by default. Enable them by setting `COMPOSE_
 | `filebrowser` | File Browser Quantum | `https://files.<domain>` | Web file manager for the USB disk on the host, with thumbnails and indexed search. Uses proxy auth so Authelia is the only login — which means it must never publish a port. Set `STORAGE_PATH` and mount the disk first — see [docs/storage.md](docs/storage.md) |
 | `nextcloud` | Nextcloud (+ Postgres, Redis) | `https://cloud.<domain>` | File sync over the same USB disk, attached as External Storage. **Not** behind Authelia — sync clients speak WebDAV and cannot follow an SSO redirect. Needs a mount-permission change first — see [docs/storage.md](docs/storage.md) |
 | `doctools` | Stirling-PDF | `https://docs.<domain>` | Merge, split, compress, convert, OCR and sign PDFs without uploading them anywhere. Behind Authelia, on an internal network with no route to the internet. Run `scripts/fetch-tessdata.sh` once before the first start (Indonesian OCR) — see [docs/doc-tools.md](docs/doc-tools.md) |
+| `vaultwarden` | Vaultwarden | `https://vault.<domain>` | Password manager (Bitwarden-compatible server). **Not** behind Authelia — the Bitwarden apps cannot follow an SSO redirect — so it is limited to the home network and Tailscale by the `internal-only` middleware, with no public DNS record. Read [docs/vaultwarden.md](docs/vaultwarden.md) before enabling: the setup order matters and the vault must not hold real passwords until a backup has been restored once |
 | `voice` | Home Assistant + Whisper + Piper + Ollama (**Ollama stopped**: the Pi browns out under it, see [docs/storage.md](docs/storage.md)) | `https://ha.<domain>` | Bilingual ID/EN voice assistant for time, temperature and free space. **Not** behind Authelia — the Companion app cannot follow an SSO redirect. Whisper/Piper/Ollama run on all four cores at a lower `cpu_shares` weight, so inference runs flat out on an idle Pi and yields to DNS and monitoring under contention — see [docs/voice-assistant.md](docs/voice-assistant.md) |
 
 ## Updating a running host

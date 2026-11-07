@@ -36,3 +36,21 @@ http:
 
     compress:
       compress: {}
+
+    # Only the home network and Tailscale may reach the router that carries
+    # this. It is a second layer, not the only one: no public DNS and no tunnel
+    # for these hosts is the first.
+    #
+    # Whole private /16 rather than one LAN subnet, on purpose: a laptop on the
+    # modem's Wi-Fi (192.168.100.0/24) reaches the Pi (192.168.200.0/24) by
+    # routing, and the same laptop also arrives over Tailscale (100.64.0.0/10).
+    # A single-subnet list would lock out the machines that are meant to get in.
+    #
+    # It judges the client address Traefik sees. Docker's own networks
+    # (172.16.0.0/12) are deliberately NOT listed, so another container cannot
+    # reach a protected service through Traefik.
+    internal-only:
+      ipAllowList:
+        sourceRange:
+          - 192.168.0.0/16
+          - 100.64.0.0/10

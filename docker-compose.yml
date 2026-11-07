@@ -73,6 +73,7 @@ volumes:
   whisper_data:
   piper_data:
   ollama_models:
+  vaultwarden_data:
 
 services:
   # ==============================================================================
@@ -658,6 +659,66 @@ services:
       traefik.http.routers.docs.tls.certresolver: letsencrypt
       traefik.http.routers.docs.middlewares: authelia@file
       traefik.http.services.docs.loadbalancer.server.port: "8080"
+
+  # ==============================================================================
+  # Vaultwarden — password manager (Bitwarden-compatible server)
+  # ==============================================================================
+  # Everything in here is a decision about what happens when a layer fails. See
+  # docs/vaultwarden.md before turning it on: the setup order matters, and the
+  # vault must not hold real passwords until a backup has been restored once.
+  #
+  # NOT behind Authelia. The Bitwarden apps and browser extension cannot follow
+  # an SSO redirect, the same reason Nextcloud is exempt. The vault is protected
+  # by the master password, TOTP, and the `internal-only` allowlist below, which
+  # lets in only the home LAN and Tailscale. Do not add a public DNS record or a
+  # tunnel for this host, ever.
+  #
+  # No `ports:`. Traefik is the only way in.
+  #
+  # The admin page is off: it only exists when ADMIN_TOKEN is set, and it is not.
+  # Everything it would configure is an environment variable here instead.
+  #
+  # Pinned by tag and digest (1.37.5, multi-arch incl. arm64). Read the release
+  # notes before bumping: this is the one image in the stack where a bad update
+  # is a bad day.
+  #
+  # Signups: closed by default. To create the owner account, set
+  # VAULTWARDEN_SIGNUPS=true in .env, `docker compose up -d vaultwarden`, register,
+  # then remove the line and run it again. The allowlist already limits who can
+  # reach the registration page in the meantime.
+  vaultwarden:
+    image: vaultwarden/server:1.37.5@sha256:4fe17f415f90087377d37c755e0ea3cf189dcc6794e49cdd2a9adbb4937d9e1f
+    container_name: vaultwarden
+    restart: unless-stopped
+    profiles:
+      - vaultwarden
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    mem_limit: 256m
+    networks:
+      - proxy
+    volumes:
+      - vaultwarden_data:/data
+    environment:
+      - TZ=${TZ}
+      - DOMAIN=https://vault.${DOMAIN}
+      - SIGNUPS_ALLOWED=${VAULTWARDEN_SIGNUPS:-false}
+      # These three default to TRUE even with signups closed. Invitations let an
+      # existing user add another one; emergency access and Send are features a
+      # one-person vault does not use and does not need to expose.
+      - INVITATIONS_ALLOWED=false
+      - EMERGENCY_ACCESS_ALLOWED=false
+      - SENDS_ALLOWED=false
+      - SHOW_PASSWORD_HINT=false
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.vaultwarden.rule: Host(`vault.${DOMAIN}`)
+      traefik.http.routers.vaultwarden.entrypoints: websecure
+      traefik.http.routers.vaultwarden.tls.certresolver: letsencrypt
+      traefik.http.routers.vaultwarden.middlewares: internal-only@file,compress@file
+      traefik.http.services.vaultwarden.loadbalancer.server.port: "80"
 
   # ==============================================================================
   # Voice assistant — Home Assistant + Whisper (STT) + Piper (TTS) + Ollama (LLM)
