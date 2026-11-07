@@ -65,6 +65,11 @@
     #    description: Files, calendar, contacts
 
 - Apps:
+    # Profile `doctools`. PDF and image tools plus OCR; no document leaves the house.
+    - PDF Tools:
+        icon: stirling-pdf.svg
+        href: https://docs.{{HOMEPAGE_VAR_DOMAIN}}
+        description: Convert, compress, OCR, sign — offline
     - Coolify:
         icon: coolify.svg
         href: https://coolify.syonin.site

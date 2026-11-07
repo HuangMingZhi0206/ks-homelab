@@ -11,6 +11,14 @@ authelia/notification.txt
 backups/
 homepage/config/logs/
 
+# Editor swap files. A vim swap file of users_database.yml holds fragments of
+# the real one (password hashes), and this repo is public.
+*.swp
+*.swo
+
+# Downloaded by scripts/fetch-tessdata.sh, not committed
+stirling/ind.traineddata
+
 # OS noise
 .DS_Store
 Thumbs.db

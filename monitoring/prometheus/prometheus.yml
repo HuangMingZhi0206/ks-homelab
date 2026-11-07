@@ -90,6 +90,7 @@ scrape_configs:
           - auth.lab.syonin.site:443
           - grafana.lab.syonin.site:443
           - files.lab.syonin.site:443
+          - docs.lab.syonin.site:443
     relabel_configs:
       - source_labels: [__address__]
         target_label: __param_target
