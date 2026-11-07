@@ -166,6 +166,31 @@ Ten optional services ship disabled by default. Enable them by setting `COMPOSE_
 | `doctools` | Stirling-PDF | `https://docs.<domain>` | Merge, split, compress, convert, OCR and sign PDFs without uploading them anywhere. Behind Authelia, on an internal network with no route to the internet. Run `scripts/fetch-tessdata.sh` once before the first start (Indonesian OCR) — see [docs/doc-tools.md](docs/doc-tools.md) |
 | `voice` | Home Assistant + Whisper + Piper + Ollama (**Ollama stopped**: the Pi browns out under it, see [docs/storage.md](docs/storage.md)) | `https://ha.<domain>` | Bilingual ID/EN voice assistant for time, temperature and free space. **Not** behind Authelia — the Companion app cannot follow an SSO redirect. Whisper/Piper/Ollama run on all four cores at a lower `cpu_shares` weight, so inference runs flat out on an idle Pi and yields to DNS and monitoring under contention — see [docs/voice-assistant.md](docs/voice-assistant.md) |
 
+## Updating a running host
+
+```bash
+git pull
+docker compose up -d
+```
+
+`up -d` only recreates services whose Compose definition changed. It does not notice a config file that changed underneath a running container, and for a **single file** bind mount that is a trap: `git pull` replaces a file by writing a new one (a new inode), but the mount keeps pointing at the old one. The container goes on reading the previous version and nothing reports an error.
+
+This happened for real when `docs.lab.syonin.site` was added to the TLS probe: the file on the host had the new target, the file inside Prometheus did not (different inodes), and `kill -HUP` changed nothing because there was nothing new to reload. Restarting the service re-resolves the mount.
+
+After a pull that touches one of these files, restart the service that reads it:
+
+| File | Restart |
+|---|---|
+| `authelia/configuration.yml` | `authelia` |
+| `monitoring/prometheus/prometheus.yml` | `prometheus` |
+| `monitoring/snmp/snmp.yml` | `snmp-exporter` |
+| `monitoring/blackbox/blackbox.yml` | `blackbox-exporter` |
+| `filebrowser/config.yaml` | `filebrowser` |
+
+Directory mounts (Homepage, Grafana provisioning and dashboards, Traefik's `dynamic/`, the node-exporter textfile directory, Home Assistant) do not have this problem. To check a suspect one, compare `stat -c %i <file>` on the host with `docker exec <service> stat -c %i <path>`: different numbers mean the container is reading a stale file.
+
+Scripts run from the host (`heartbeat.sh`, `telegram-status.sh`) pick up a pull on their next start. The bot is a long-running service, so it needs `sudo systemctl restart telegram-bot`.
+
 ## Adding a new service
 
 Add it to `docker-compose.yml`, join the `proxy` network, and label it:

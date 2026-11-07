@@ -11,8 +11,9 @@ authelia/notification.txt
 backups/
 homepage/config/logs/
 
-# Editor swap files. A vim swap file of users_database.yml holds fragments of
-# the real one (password hashes), and this repo is public.
+# Editor swap files. vim's swap file holds fragments of whatever was being
+# edited — for users_database.yml that means password hashes — and this repo is
+# public. nano leaves a metadata-only .swp lock file instead; ignored too.
 *.swp
 *.swo
 
