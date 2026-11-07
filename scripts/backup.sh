@@ -35,6 +35,12 @@ err()  { printf '\033[1;31m[!]\033[0m %s\n' "$*" >&2; }
 # shellcheck disable=SC1091
 [[ -f .env ]] && source .env
 
+# `source` only sets shell variables. restic is a child process and reads its
+# repository and password file from its ENVIRONMENT, so without this the test
+# above passes (the variable is set) and then restic fails with "Please specify
+# repository location". This path had never been run end to end.
+export RESTIC_REPOSITORY RESTIC_PASSWORD_FILE
+
 BACKUP_DIR="${BACKUP_DIR:-$REPO_ROOT/backups}"
 BACKUP_KEEP="${BACKUP_KEEP:-7}"
 COMPOSE_PROJECT="${COMPOSE_PROJECT_NAME:-homelab}"
